@@ -96,6 +96,8 @@ mkdir -v -m 0600 /usr/local/csf/bin
 mkdir -v -m 0600 /usr/local/csf/lib
 mkdir -v -m 0600 /usr/local/csf/tpl
 
+apply_syn_hardening
+
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
 fi
