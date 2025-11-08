@@ -6,7 +6,7 @@
 #   @download           https://download.configserver.shop
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#                       Copyright (C) 2025-2026 Dr. Correo Hofstad Jr.
+#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.

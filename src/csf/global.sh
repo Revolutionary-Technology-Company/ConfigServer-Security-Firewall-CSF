@@ -7,7 +7,7 @@
 #   @download           https://download.configserver.shop
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#                       Copyright (C) 2025-2026 Dr. Correo Hofstad Jr.
+#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
@@ -394,3 +394,95 @@ copy_or_new( )
         fi
     fi
 }
+
+#####################################################################
+# START Revolutionary Technology Performance Auto-Tuner
+#####################################################################
+
+auto_tune_performance() {
+    print "    Running Revolutionary Technology Performance Auto-Tuner..."
+
+    # --- 1. Get System Specs ---
+    local TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local TOTAL_RAM_MB=$((TOTAL_RAM_KB / 1024))
+    local TOTAL_RAM_GB=$((TOTAL_RAM_MB / 1024))
+    local CPU_CORES=$(nproc)
+    local CSF_CONF="/etc/csf/csf.conf"
+
+    print "    > Detected ${greenl}${TOTAL_RAM_MB}MB${greym} RAM and ${greenl}${CPU_CORES}${greym} CPU cores."
+
+    # --- 2. Calculate Conntrack (12% of RAM) ---
+    local RAM_FOR_CT_MB=$((TOTAL_RAM_MB * 12 / 100))
+    local RAM_FOR_CT_BYTES=$((RAM_FOR_CT_MB * 1024 * 1024))
+    local CONNTRACK_ENTRY_SIZE=300 # Approx. 300 bytes per entry
+    local NEW_CONNTRACK_MAX=$((RAM_FOR_CT_BYTES / CONNTRACK_ENTRY_SIZE))
+    local NEW_CONNTRACK_BUCKETS=$((NEW_CONNTRACK_MAX / 8))
+
+    # Set sane minimums (for a 1GB server) and maximums (for a 256GB+ server)
+    if [ "$NEW_CONNTRACK_MAX" -lt 65536 ]; then NEW_CONNTRACK_MAX=65536; fi
+    if [ "$NEW_CONNTRACK_MAX" -gt 100000000 ]; then NEW_CONNTRACK_MAX=100000000; fi
+    if [ "$NEW_CONNTRACK_BUCKETS" -lt 8192 ]; then NEW_CONNTRACK_BUCKETS=8192; fi
+    if [ "$NEW_CONNTRACK_BUCKETS" -gt 12500000 ]; then NEW_CONNTRACK_BUCKETS=12500000; fi
+
+    print "    > Setting conntrack max to ${greenl}$NEW_CONNTRACK_MAX${greym} (12% of RAM)"
+
+    # --- 3. Apply Conntrack Settings (sysctl) ---
+    local CT_CONF_FILE="/etc/sysctl.d/98-revolutionary-tech-conntrack.conf"
+    echo "# Revolutionary Technology - Auto-tuned conntrack settings" > "$CT_CONF_FILE"
+    echo "net.netfilter.nf_conntrack_max = $NEW_CONNTRACK_MAX" >> "$CT_CONF_FILE"
+    echo "net.netfilter.nf_conntrack_buckets = $NEW_CONNTRACK_BUCKETS" >> "$CT_CONF_FILE"
+    sysctl -p "$CT_CONF_FILE" > /dev/null 2>&1
+
+    # --- 4. Calculate CSF Settings (CPU/RAM based) ---
+    
+    # Connection Limit (Scale: 150 per core, min 300) [cite: 361]
+    local NEW_CT_LIMIT=$((CPU_CORES * 150))
+    if [ "$NEW_CT_LIMIT" -lt 300 ]; then NEW_CT_LIMIT=300; fi
+    
+    # Process Memory Limit (Scale: 100MB per GB RAM, min 512, max 4096) [cite: 364]
+    local NEW_PT_USERMEM=$((TOTAL_RAM_GB * 100))
+    if [ "$NEW_PT_USERMEM" -lt 512 ]; then NEW_PT_USERMEM=512; fi
+    if [ "$NEW_PT_USERMEM" -gt 4096 ]; then NEW_PT_USERMEM=4096; fi
+    
+    # IPSET Max (Scale: 10k per GB RAM, min 100k, max 2M) [cite: 355]
+    local NEW_IPSET_MAX=$((TOTAL_RAM_GB * 10000))
+    if [ "$NEW_IPSET_MAX" -lt 100000 ]; then NEW_IPSET_MAX=100000; fi
+    if [ "$NEW_IPSET_MAX" -gt 2000000 ]; then NEW_IPSET_MAX=2000000; fi
+    
+    # Deny Limit (Scale: 250 per GB RAM, min 2k, max 50k) [cite: 359]
+    local NEW_DENY_IP_LIMIT=$((TOTAL_RAM_GB * 250))
+    if [ "$NEW_DENY_IP_LIMIT" -lt 2000 ]; then NEW_DENY_IP_LIMIT=2000; fi
+    if [ "$NEW_DENY_IP_LIMIT" -gt 50000 ]; then NEW_DENY_IP_LIMIT=50000; fi
+    
+    # SYN Flood Rate (Higher for more cores) [cite: 366]
+    local NEW_SYNFLOOD_RATE="100/s"
+    local NEW_SYNFLOOD_BURST="150"
+    if [ "$CPU_CORES" -gt 8 ]; then
+        NEW_SYNFLOOD_RATE="300/s"
+        NEW_SYNFLOOD_BURST="450"
+    fi
+
+    # --- 5. Apply CSF Settings (sed) ---
+    if [ -f "$CSF_CONF" ]; then
+        print "    > Applying auto-tuned settings to ${greenl}csf.conf${greym}..."
+        
+        # Enable IPSET 
+        sed -i "s#^LF_IPSET = \".*\"#LF_IPSET = \"1\"#" "$CSF_CONF"
+        
+        # Set Tuned Values
+        sed -i "s#^CT_LIMIT = \".*\"#CT_LIMIT = \"$NEW_CT_LIMIT\"#" "$CSF_CONF"
+        sed -i "s#^PT_USERMEM = \".*\"#PT_USERMEM = \"$NEW_PT_USERMEM\"#" "$CSF_CONF"
+        sed -i "s#^DENY_IP_LIMIT = \".*\"#DENY_IP_LIMIT = \"$NEW_DENY_IP_LIMIT\"#" "$CSF_CONF"
+        sed -i "s#^LF_IPSET_MAXELEM = \".*\"#LF_IPSET_MAXELEM = \"$NEW_IPSET_MAX\"#" "$CSF_CONF"
+        sed -i "s#^SYNFLOOD_RATE = \".*\"#SYNFLOOD_RATE = \"$NEW_SYNFLOOD_RATE\"#" "$CSF_CONF"
+        sed -i "s#^SYNFLOOD_BURST = \".*\"#SYNFLOOD_BURST = \"$NEW_SYNFLOOD_BURST\"#" "$CSF_CONF"
+        
+        ok "    Auto-tuning complete."
+    else
+        warn "    ${redl}WARNING:${greym} csf.conf not found. Skipping auto-tune for CSF."
+    fi
+}
+
+#####################################################################
+# END Revolutionary Technology Performance Auto-Tuner
+#####################################################################

@@ -7,7 +7,7 @@
 #   @download           https://download.configserver.shop
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#                       Copyright (C) 2025-2026 Dr. Correo Hofstad Jr.
+#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
@@ -94,6 +94,33 @@ else
     echo "...Perl modules OK"
     echo
 fi
+#
+# --- [Revolutionary Tech] Install Tarpit Dependencies (Multi-Distro) ---
+#
+print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
+
+if [ -f /usr/bin/apt-get ]; then
+    # --- This is a Debian or Ubuntu system ---
+    print "    > Detected apt package manager (Debian/Ubuntu)."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y > /dev/null 2>&1
+    apt-get install xtables-addons-common xtables-addons-dkms -y > /dev/null 2>&1
+    modprobe xt_TARPIT
+    print "    [+] Tarpit dependencies installed."
+
+elif [ -f /usr/bin/yum ]; then
+    # --- This is a Red Hat, CentOS, or AlmaLinux system ---
+    print "    > Detected yum package manager (RHEL/CentOS/AlmaLinux)."
+    yum install epel-release -y > /dev/null 2>&1
+    yum install xtables-addons-kmod xtables-addons -y > /dev/null 2>&1
+    modprobe xt_TARPIT
+    print "    [+] Tarpit dependencies installed."
+else
+    print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
+fi
+#
+# --- [Revolutionary Tech] End Tarpit Dependencies ---
+#
 
 mkdir -v -m 0600 /etc/csf
 mkdir -v -m 0600 /var/lib/csf
@@ -109,7 +136,19 @@ mkdir -v -m 0600 /usr/local/csf/bin
 mkdir -v -m 0600 /usr/local/csf/lib
 mkdir -v -m 0600 /usr/local/csf/tpl
 
+# Revolutionary Technology Control
+sysctl -w net.ipv4.tcp_syncookies=1
+echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
+sysctl -p
+iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
+iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
 apply_syn_hardening
+auto_tune_performance
+print "    Installing Revolutionary Technology pre-install scripts..."
+mkdir -p -m 0755 /usr/local/include/csf/pre.d/
+cp -avf stresengine.sh /usr/local/include/csf/pre.d/
+chmod -v 700 /usr/local/include/csf/pre.d/*.sh
+
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh

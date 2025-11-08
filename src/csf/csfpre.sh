@@ -2,11 +2,12 @@
 # #
 #   @app                ConfigServer Firewall & Security (CSF)
 #                       Login Failure Daemon (LFD)
-#   @website            https://configserver.dev
-#   @docs               https://docs.configserver.dev
-#   @download           https://download.configserver.dev
-#   @repo               https://github.com/Aetherinox/csf-firewall
-#   @copyright          Copyright (C) 2025-2026 Aetherinox
+#   @website            https://configserver.shop
+#   @docs               https://docs.configserver.shop
+#   @download           https://download.configserver.shop
+#   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
+#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
@@ -183,12 +184,3 @@ fi
 # #
 
 ok "    Loaded ${greenl}${count_loaded}${greym} pre.d initialization scripts"
-
-
-
-# Revolutionary Technology Control
-sysctl -w net.ipv4.tcp_syncookies=1
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
-sysctl -p
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP

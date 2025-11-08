@@ -1,15 +1,23 @@
 ChangeLog:
 
-2.15.07 - Integrated new kernel-level SYN Flood Protection engine.
-        
-	Installer now applies sysctl hardening rules for tcp_syncookies, tcp_max_syn_backlog, and tcp_synack_retries.
+2.15.07 - Integrated new "Attacker Stress Engine".
+        When DROP = "TARPIT" is enabled, CSF now uses a high-performance,
+        stateless xt_TARPIT module (via NOTRACK) to conserve system
+        memory and degrade attackers.
+        Installer now automatically installs "xtables-addons" dependencies.
+		
+		Added new "Responsive Resource Allocation" engine to the installer.
+        The installer now auto-tunes performance settings based on server
+        RAM and CPU cores. This includes kernel conntrack tables (12%
+        of system RAM), CT_LIMIT, PT_USERMEM, and IPSET limits for
+        high-performance servers.
+		
+		Integrated new kernel-level SYN Flood Protection engine.
+        Installer now applies sysctl hardening rules for tcp_syncookies, tcp_max_syn_backlog, and tcp_synack_retries.
 
         Added full support for ModSecurity 3.x.
-
         Installer auto-detects ModSec3 JSON logs.
-
         Deploys a new 'modsec3-converter.service' (modsec3_converter.pl) to provide backwards compatibility for LFD.
-
         MODSEC_LOG path is now set automatically during installation.
 
 15.07 - Add new tab "Resources" to tab interface.
