@@ -941,7 +941,7 @@ jobs:
 
             - name: "🎁 Commit › Download Artifact"
               id: task_commit_artifact_download
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v6
               with:
                   name: blocklist-latest
                   path: ./
