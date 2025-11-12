@@ -107,3 +107,4 @@ exe:/usr/bin/dbus-broker
 #cmd:/bin/sh /usr/bin/mysqld_safe
 #cmd:/bin/sh /usr/bin/mysqld_safe --basedir=/usr
 #pcmd:MailScanner:.*
+exe:/opt/cpanel/ea-php*/root/usr/sbin/php-fpm

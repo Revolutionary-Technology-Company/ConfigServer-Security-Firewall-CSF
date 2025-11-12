@@ -90,3 +90,4 @@ exe:/sbin/rngd
 exe:/usr/sbin/mariadbd
 exe:/usr/bin/dbus-broker-launch
 exe:/usr/bin/dbus-broker
+exe:/opt/cpanel/ea-php*/root/usr/sbin/php-fpm

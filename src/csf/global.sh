@@ -394,6 +394,45 @@ copy_or_new( )
         fi
     fi
 }
+#####################################################################
+# START Revolutionary Technology SYN Flood Hardening
+#####################################################################
+
+apply_syn_hardening() {
+    print "    Running Revolutionary Technology SYN Flood Hardening..."
+    local SYSCTL_CONF="/etc/sysctl.conf"
+
+    # --- Kernel-level Hardening ---
+    sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
+    sysctl -w net.ipv4.tcp_max_syn_backlog=8192 > /dev/null 2>&1
+    sysctl -w net.ipv4.tcp_synack_retries=2 > /dev/null 2>&1
+
+    # --- Make Permanent ---
+    if grep -q "net.ipv4.tcp_syncookies" "$SYSCTL_CONF"; then
+        sed -i "s/.*net.ipv4.tcp_syncookies.*/net.ipv4.tcp_syncookies = 1/" "$SYSCTL_CONF"
+    else
+        echo "net.ipv4.tcp_syncookies = 1" >> "$SYSCTL_CONF"
+    fi
+
+    if grep -q "net.ipv4.tcp_max_syn_backlog" "$SYSCTL_CONF"; then
+        sed -i "s/.*net.ipv4.tcp_max_syn_backlog.*/net.ipv4.tcp_max_syn_backlog = 8192/" "$SYSCTL_CONF"
+    else
+        echo "net.ipv4.tcp_max_syn_backlog = 8192" >> "$SYSCTL_CONF"
+    fi
+
+    if grep -q "net.ipv4.tcp_synack_retries" "$SYSCTL_CONF"; then
+        sed -i "s/.*net.ipv4.tcp_synack_retries.*/net.ipv4.tcp_synack_retries = 2/" "$SYSCTL_CONF"
+    else
+        echo "net.ipv4.tcp_synack_retries = 2" >> "$SYSCTL_CONF"
+    fi
+
+    sysctl -p > /dev/null 2>&1
+    ok "    SYN Flood Hardening applied."
+}
+
+#####################################################################
+# END Revolutionary Technology SYN Flood Hardening
+#####################################################################
 
 #####################################################################
 # START Revolutionary Technology Performance Auto-Tuner

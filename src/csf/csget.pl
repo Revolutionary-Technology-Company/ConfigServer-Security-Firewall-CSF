@@ -145,8 +145,9 @@ my $GET;
 
 my @downloadservers = (
         "https://download.configserver.shop"
-    #   "https://raw.githubusercontent.com/Revolutionary-Technology-Company/ConfigServer-Security-Firewall-CSF/main/api/templates/versions"
-    # , "https://download.configserver.com"
+     , "https://download.configserver.live"
+	 , "https://download.configserver.host"
+	 , "https://download.configserver.online"
 );
 
 # #
@@ -502,84 +503,93 @@ unless ( defined $ARGV[0] && $ARGV[0] eq '--nosleep' )
 }
 
 # #
-#   loop download server array with Fisher-Yates shuffle
-#       Randomize order of @downloadservers.
+#   Loop update url
+#       Connects to the Revolutionary Technology API to validate the license
+#       and fetch the latest version number for each installed product.
 # #
 
-for ( my $x = @downloadservers; --$x; )
-{
-	my $y = int( rand( $x+1 ) );
-	if ( $x == $y ) { next }
-	@downloadservers[ $x,$y ] = @downloadservers[ $y,$x ];
+my $api_endpoint = "https://configserver.shop/api/version_check.php"; # Your new API script
+my $license_key  = $CONFIG{SPONSOR_LICENSE} // '';
+
+# Check if a license key exists
+if ( $license_key eq '' ) {
+    dbg( "DEBUG: No SPONSOR_LICENSE key found in /etc/csf/csf.conf. Skipping update check.\n" );
+    
+    # Create an error file for all version checks
+    foreach my $version_file ( values %versions ) {
+        unless ( -e $version_file ) {
+            open ( my $ERROR, ">", $version_file.".error" );
+            print $ERROR "No license key found in /etc/csf/csf.conf. Please add your SPONSOR_LICENSE key.";
+            close ( $ERROR );
+        }
+    }
+    
+    exit 0; # Exit the script
 }
 
-# #
-#   Loop update url
-# #
-
-foreach my $server ( @downloadservers )
+# Loop through each product that needs a version check
+foreach my $version_path ( keys %versions )
 {
-    dbg( "DEBUG: Checking server: $server\n" );
-    foreach my $version ( keys %versions )
+    my $version_file = $versions{$version_path};
+    dbg( "DEBUG: Checking product: $version_path -> $version_file\n" );
+
+    # Skip if version file already exists (check was successful before)
+    if ( -e $version_file )
     {
-        dbg( "DEBUG: Checking version: $version -> $versions{$version}\n" );
-        unless ( -e $versions{ $version } )
+        dbg( "DEBUG: $version_file already exists, skipping download\n" );
+        next; # Go to the next product
+    }
+
+    # Remove any old error file
+    if ( -e $version_file.".error" )
+    {
+        unlink $version_file.".error";
+        dbg( "DEBUG: Removed previous error file: $version_file.error\n" );
+    }
+
+    # Extract the simple product name (e.g., "csf", "cxs")
+    my ($product_name) = $version_path =~ m{/(\w+)/};
+    unless ($product_name) {
+        ($product_name) = $version_path =~ m{/(\w+)\.txt$}; # Fallback for msfeversion.txt
+    }
+    
+    unless ($product_name) {
+        dbg( "DEBUG: Could not parse product name from $version_path. Skipping.\n" );
+        next;
+    }
+
+    # Build the new API URL
+    my $url = "$api_endpoint?license_key=$license_key&product=$product_name";
+    dbg( "DEBUG: Preparing to download $product_name version from $api_endpoint\n" );
+
+    # Execute the download command (note the quotes around $url)
+    my $status = system( "$cmd $version_file \"$url\"" );
+    dbg( "DEBUG: Command executed: $cmd $version_file \"$url\"\n" );
+    dbg( "DEBUG: Command exit code: " . ( $status >> 8 ) . "\n" );
+
+    # Handle errors (this is the same logic as your original script)
+    if ( $status )
+    {
+        if ( $GET ne "" )
         {
-            if ( -e $versions{ $version }.".error" )
-            {
-                unlink $versions{ $version }.".error";
-                dbg( "DEBUG: Removed previous error file: $versions{ $version }.error\n" );
-            }
+            open ( my $ERROR, ">", $version_file.".error" );
+            print $ERROR "$url - ";
+            close ( $ERROR );
 
-            my $url = "$server$version";
-
-            # Enable insiders channel if allowed
-            if ( ( $CONFIG{SPONSOR_RELEASE_INSIDERS} // 0 ) == 1 
-                && ( $CONFIG{SPONSOR_LICENSE} // '' ) ne '' 
-                && $version eq "/csf/version.txt" )
-            {
-                $url .= "?channel=insiders&license=$CONFIG{SPONSOR_LICENSE}";
-                dbg( "DEBUG: Using Insiders release channel, URL: $url\n" );
-            }
-            else
-            {
-                dbg( "DEBUG: Using Stable release channel, URL: $url\n" );
-            }
-
-            dbg( "DEBUG: Preparing to download $version from $url ($server)\n" );
-
-            my $status = system( "$cmd $versions{ $version } $url" );
-            dbg( "DEBUG: Command executed: $cmd $versions{ $version } $url\n" );
-            dbg( "DEBUG: Command exit code: " . ( $status >> 8 ) . "\n" );
-
-            if ( $status )
-            {
-                if ( $GET ne "" )
-                {
-                    open ( my $ERROR, ">", $versions{ $version }.".error" );
-                    print $ERROR "$server$version - ";
-                    close ( $ERROR );
-
-                    dbg( "DEBUG: Curl/wget failed, trying GET command: $GET $server$version\n" );
-                    my $GETstatus = system( "$GET $server$version >> $versions{ $version }.error" );
-                    dbg( "DEBUG: GET command exit code: " . ( $GETstatus >> 8 ) . "\n" );
-                }
-                else
-                {
-                    open ( my $ERROR, ">", $versions{ $version }.".error" );
-                    print $ERROR "Failed to retrieve latest version from ConfigServer";
-                    close ( $ERROR );
-                    dbg( "DEBUG: Failed to retrieve $version from $server and no GET command available\n" );
-                }
-            }
-            else
-            {
-                dbg( "DEBUG: Successfully downloaded $version from $server\n" );
-            }
+            dbg( "DEBUG: Curl/wget failed, trying GET command: $GET \"$url\"\n" );
+            my $GETstatus = system( "$GET \"$url\" >> $version_file.error" );
+            dbg( "DEBUG: GET command exit code: " . ( $GETstatus >> 8 ) . "\n" );
         }
         else
         {
-            dbg( "DEBUG: $versions{ $version } already exists, skipping download\n" );
+            open ( my $ERROR, ">", $version_file.".error" );
+            print $ERROR "Failed to retrieve latest version from $api_endpoint. Check license key or network.";
+            close ( $ERROR );
+            dbg( "DEBUG: Failed to retrieve $product_name and no GET command available\n" );
         }
+    }
+    else
+    {
+        dbg( "DEBUG: Successfully downloaded $product_name version to $version_file\n" );
     }
 }

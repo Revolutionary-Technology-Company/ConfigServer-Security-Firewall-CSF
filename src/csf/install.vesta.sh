@@ -98,22 +98,54 @@ fi
 # --- [Revolutionary Tech] Install Tarpit Dependencies (Multi-Distro) ---
 #
 print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
+MODPROBE_FAILED=0
+rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
 
 if [ -f /usr/bin/apt-get ]; then
     # --- This is a Debian or Ubuntu system ---
     print "    > Detected apt package manager (Debian/Ubuntu)."
     export DEBIAN_FRONTEND=noninteractive
+    # Install dependencies for signing and building
     apt-get update -y > /dev/null 2>&1
-    apt-get install xtables-addons-common xtables-addons-dkms -y > /dev/null 2>&1
-    modprobe xt_TARPIT
+    apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
+    
+    # Try to load the module and capture its error message
+    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
+    
+    if [ $? -ne 0 ]; then
+        # Module failed to load. Check why.
+        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
+            print "    > modprobe failed. Secure Boot signing required."
+            chmod 700 rt-sign-module.sh
+            ./rt-sign-module.sh
+        else
+            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
+            echo "1" > /tmp/rt_tarpit_failed
+        fi
+    fi
     print "    [+] Tarpit dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
     # --- This is a Red Hat, CentOS, or AlmaLinux system ---
     print "    > Detected yum package manager (RHEL/CentOS/AlmaLinux)."
     yum install epel-release -y > /dev/null 2>&1
-    yum install xtables-addons-kmod xtables-addons -y > /dev/null 2>&1
-    modprobe xt_TARPIT
+    # Install dependencies for signing and building
+    yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
+    
+    # Try to load the module and capture its error message
+    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
+    
+    if [ $? -ne 0 ]; then
+        # Module failed to load. Check why.
+        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
+            print "    > modprobe failed. Secure Boot signing required."
+            chmod 700 rt-sign-module.sh
+            ./rt-sign-module.sh
+        else
+            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
+            echo "1" > /tmp/rt_tarpit_failed
+        fi
+    fi
     print "    [+] Tarpit dependencies installed."
 else
     print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
@@ -142,11 +174,9 @@ echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
 sysctl -p
 iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
 iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
-apply_syn_hardening
-auto_tune_performance
 print "    Installing Revolutionary Technology pre-install scripts..."
 mkdir -p -m 0755 /usr/local/include/csf/pre.d/
-cp -avf stresengine.sh /usr/local/include/csf/pre.d/
+cp -avf stressengine.sh /usr/local/include/csf/pre.d/
 chmod -v 700 /usr/local/include/csf/pre.d/*.sh
 
 
@@ -267,10 +297,16 @@ fi
 if [ ! -e "/etc/csf/csf.conf" ]; then
 	cp -avf csf.vesta.conf /etc/csf/csf.conf
 fi
+#
+# --- [Revolutionary Tech] Set ModSecurity Log Path ---
+#
 if [ ! -z "$MODSEC_LOG_PATH" ]; then
     print "    Setting MODSEC_LOG = \"${MODSEC_LOG_PATH}\" in /etc/csf/csf.conf..."
     sed -i "s#^MODSEC_LOG = \".*\"#MODSEC_LOG = \"$MODSEC_LOG_PATH\"#" /etc/csf/csf.conf
 fi
+#
+# --- [Revolutionary Tech] End ModSecurity Log Path ---
+#
 if [ ! -e "/usr/local/csf/tpl/modsecipdbalert.txt" ]; then
 	cp -avf modsecipdbalert.txt /usr/local/csf/tpl/.
 fi

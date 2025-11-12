@@ -128,3 +128,4 @@ exe:/usr/bin/dbus-broker
 
 #   cmd:spamd child
 #   cmd:/bin/sh /usr/bin/mysqld_safe --basedir=/usr
+exe:/opt/cpanel/ea-php*/root/usr/sbin/php-fpm

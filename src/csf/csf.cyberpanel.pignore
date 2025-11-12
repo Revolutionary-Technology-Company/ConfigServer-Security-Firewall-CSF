@@ -117,3 +117,4 @@ exe:/usr/lib/dovecot/stats
 exe:/usr/local/lsws/bin/openlitespeed
 exe:/usr/local/CyberCP/bin/lswsgi
 exe:/usr/sbin/mariadbd
+exe:/opt/cpanel/ea-php*/root/usr/sbin/php-fpm
