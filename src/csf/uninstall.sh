@@ -5,6 +5,20 @@ echo
 # Stop and flush the firewall
 /usr/sbin/csf -f
 
+# [Revolutionary Tech Uninstall]
+# Remove custom iptables rules and sysctl settings
+echo "Removing custom firewall rules and sysctl settings..."
+iptables -D INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP >/dev/null 2>&1
+iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/null 2>&1
+
+# Remove persistent syncookies setting and reload
+if grep -q "^net.ipv4.tcp_syncookies[[:space:]]*=[[:space:]]*1" /etc/sysctl.conf; then
+    sed -i '/^net.ipv4.tcp_syncookies[[:space:]]*=[[:space:]]*1/d' /etc/sysctl.conf
+    echo "Reloading sysctl configuration..."
+    sysctl -p >/dev/null 2>&1
+fi
+# [End Revolutionary Tech Uninstall]
+
 if test `cat /proc/1/comm` = "systemd"; then
     # Stop and disable csf/lfd
     systemctl disable csf.service
@@ -113,5 +127,12 @@ rm -Rfv /etc/csf
 rm -Rfv /usr/local/csf
 rm -Rfv /var/lib/csf
 
+# [Revolutionary Tech Uninstall]
+# Remove custom pre-install script directory
+echo "Removing Revolutionary Technology pre-install scripts..."
+rm -Rfv /usr/local/include/csf
+# [End Revolutionary Tech Uninstall]
+
 echo
 echo "...Good luck!"
+```
