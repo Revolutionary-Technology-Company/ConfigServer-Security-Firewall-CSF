@@ -1,3 +1,76 @@
+Revolutionary Technology - Software Licensing Policy
+
+Thank you for choosing ConfigServer Security & Firewall (CSF), the
+world's first Hardware-Accelerated Security Engine. This document
+explains our licensing model, what you receive with your purchase,
+and how we proudly support the open-source community.
+
+Our "Dual License" Philosophy
+
+Our business model is simple: we provide the world's most advanced
+security software, built on a foundation of open-source code.
+
+The Software (GPLv3): The core CSF software is licensed under the
+GNU General Public License v3 (GPLv3), a copy of which is included
+in license.txt. This guarantees your freedom to use, modify, and
+share the code.
+
+The "Access Key" (What You Purchase): Your $349 purchase is not
+for the software itself, but for a per-server license key. This
+key is your proof of purchase and grants you access to our
+commercial, value-added services.
+
+What Your $349 License Key Includes
+
+Your purchase of a single, per-server license gives you access to
+ the Revolutionary Technology ecosystem, which includes:
+
+One (1) Per-Server License: Your key is valid for a single
+installation of CSF on one server.
+
+3 Months of Premium Updates: You receive 3 months of access to
+ our private, secure download repository. This includes all
+ new versions, hardware offloading profiles, xtables-addons
+ integrations, and performance-tuning updates.
+
+Hardware-Acceleration Engine: Your key unlocks the proprietary
+CSF Auto-Tuner, which activates your NIC's hidden microprocessors
+to enable hardware offloading (RPS) and the "12%/88%" performance
+model. "This is the "blue light" feature that delivers up to
+10x speed increase."
+
+Basic Support: Access to our community forums and knowledge
+base for the duration of your license.
+
+License Packages & Premium Services
+
+We offer packages to fit your infrastructure needs:
+
+Single License: $349.00
+
+Includes one (1) server license and 3 months of updates.
+
+Yearly Updates (Renewal): $199.00 /year
+
+Extends your access to the premium update repository for 12
+months. (Requires an active license).
+
+Premium Installation Service: $149.00 (One-Time Fee)
+
+A certified Revolutionary Technology engineer will personally
+install, configure, and tune your CSF installation, including
+kernel-level optimizations and hardware offloading, to ensure
+your "10x speed" advantage is active.
+
+Enterprise Support: (Contact Sales)
+
+24/7/365 direct access to our tier-3 engineers for mission-critical
+infrastructure, including support for the .townhall mainframe network.
+
+By purchasing a license, you are funding the research and development
+that allows us to find new ways to unlock hardware acceleration and
+push the boundaries of server security.
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

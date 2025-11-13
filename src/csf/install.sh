@@ -76,6 +76,18 @@ argDetect="false"				# returns the installer name + desc that would have ran, bu
 argLegacy="false"				# certain actions will work how pre CSF v15.01 did 
 
 # #
+#   Define directories
+#   (Moved definitions here for clarity)
+# #
+CSF_DIR="/etc/csf"
+BIN_DIR="/usr/sbin"
+LIB_DIR="/var/lib/csf"
+AUTOTUNE_SCRIPT="csf-autotune.sh"
+AUTOTUNE_DEST="/usr/local/sbin/csf-autotune.sh"
+SANITY_FILE="sanity.txt"
+
+
+# #
 #   Func › Usage Menu
 # #
 
@@ -397,3 +409,47 @@ elif [ -e "/usr/local/CyberCP" ]; then
 else
     run_installer "install.generic.sh" "Generic"
 fi
+
+# -------------------------------------------------------------------
+#  BEGIN AUTO-TUNER INTEGRATION
+# -------------------------------------------------------------------
+
+# This block runs *after* the sub-installer (e.g. install.cpanel.sh)
+# has finished and copied all the config files to /etc/csf/
+
+print ""
+print "    Installing CSF Auto-Tuner..."
+
+if [ ! -f "$AUTOTUNE_SCRIPT" ]; then
+    print "    ${redl}[ERROR]${greym} $AUTOTUNE_SCRIPT not found in installer directory. Skipping auto-tuning."
+else
+    # Check that the sub-installer did its job
+    if [ ! -f "$CSF_DIR/csf.conf" ]; then
+        print "    ${redl}[ERROR]${greym} $CSF_DIR/csf.conf not found. Auto-Tuner cannot run."
+    elif [ ! -f "$CSF_DIR/$SANITY_FILE" ]; then
+        print "    ${redl}[ERROR]${greym} $CSF_DIR/$SANITY_FILE not found. Auto-Tuner cannot run."
+    else
+        cp "$AUTOTUNE_SCRIPT" "$AUTOTUNE_DEST"
+        if [ $? -eq 0 ]; then
+            chmod +x "$AUTOTUNE_DEST"
+            print "    [OK] Auto-Tuner installed to $AUTOTUNE_DEST"
+            
+            print ""
+            print "    Running initial hardware-based tuning..."
+            print "    This will apply the 'Max Performance' 12% resource slice if a high-end server is detected."
+            
+            # Run the auto-tuner to modify /etc/csf/csf.conf
+            # And apply kernel-level optimizations
+            "$AUTOTUNE_DEST"
+            
+            print "    [OK] Initial tuning complete."
+        else
+            print "    ${redl}[ERROR]${greym} Failed to copy $AUTOTUNE_SCRIPT to $AUTOTUNE_DEST. Skipping auto-tuning."
+        fi
+    fi
+fi
+
+print ""
+# -------------------------------------------------------------------
+#  END AUTO-TUNER INTEGRATION
+# -------------------------------------------------------------------
