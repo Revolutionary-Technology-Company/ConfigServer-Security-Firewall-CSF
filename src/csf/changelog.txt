@@ -1,6 +1,23 @@
 ChangeLog:
 
-2.15.07 - Integrated new "Attacker Stress Engine".
+2.15.07 - Refactored the entire update system for secure, license-based
+        authentication on configserver.shop.
+        
+        Removed all hard-coded public download servers from the
+        update-check script (csget.pl).
+        
+        Integrated new secure API endpoints (downloader.php and
+        version_check.php) to validate purchases.
+        
+        All product updates and version checks for v2.15.xx now require
+        a valid serial KEY "SPONSOR_LICENSE" key for authentication.
+		
+		Revolutionary Technology offers three distinct product lines:
+		* **Version 15.00:** The original legacy release from configserver.com. This version is provided as-is for a small fee to cover bandwidth and resources.
+		* **Version 15.xx:** A non-profit, GUI-focused version primarily for educational purposes.
+		* **Version 2.15.xx:** Our premium, modern product line. This is the only version that receives new kernel-level security features, iptables enhancements, and our latest GUI.
+
+		Integrated new "Attacker Stress Engine".
         Installer now automatically installs all 'xtables-addons' dependencies
         (including 'xt_TARPIT') on apt and yum-based systems.
         Installer now detects Secure Boot and will automatically:
