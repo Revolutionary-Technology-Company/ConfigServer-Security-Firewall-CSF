@@ -31,10 +31,10 @@ if test `cat /proc/1/comm` = "systemd"; then
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service
 
-    # [NEW] Stop and disable RPS Tuner service
-    echo "Stopping RPS Tuner service..."
-    systemctl disable csf-rps-tuner.service >/dev/null 2>&1
-    systemctl stop csf-rps-tuner.service
+    # [UPDATED] Stop and disable NIC Accelerator service
+    echo "Stopping NIC Accelerator service..."
+    systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
+    systemctl stop csf-nic-accelerator.service
 
     rm -fv /usr/lib/systemd/system/csf.service
     rm -fv /usr/lib/systemd/system/lfd.service
@@ -42,8 +42,8 @@ if test `cat /proc/1/comm` = "systemd"; then
     # [NEW] Remove ModSec3 Bridge service file
     rm -fv /etc/systemd/system/modsec3-converter.service
     
-    # [NEW] Remove RPS Tuner service file
-    rm -fv /etc/systemd/system/csf-rps-tuner.service
+    # [UPDATED] Remove NIC Accelerator service file
+    rm -fv /etc/systemd/system/csf-nic-accelerator.service
     
     systemctl daemon-reload
 else
@@ -135,4 +135,3 @@ rm -Rfv /usr/local/include/csf
 
 echo
 echo "...Good luck!"
-```

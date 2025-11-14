@@ -13,7 +13,7 @@ CONF_FILE="/etc/csf/csf.conf"
 SANITY_FILE="/etc/csf/sanity.txt"
 BACKUP_FILE="/etc/csf/csf.conf.autotune.bak"
 KERNEL_TUNE_FILE="/etc/sysctl.d/99-csf-tuning.conf"
-RPS_SERVICE_FILE="/etc/systemd/system/csf-rps-tuner.service"
+RPS_SERVICE_FILE="/etc/systemd/system/csf-nic-accelerator.service" # Renamed service
 
 # --- Helper Functions ---
 
@@ -60,7 +60,7 @@ check_sanity() {
             fi
         done
         
-        # Handle complex options like CT_LIMIT=0|10-1000=0
+        # Handle complex options like CT_LIMIT=0|10-000=0
         if [[ "$ranges" == *-* ]]; then
             # This is a range with a '|' prefix, fall through to range check
             :
@@ -72,17 +72,17 @@ check_sanity() {
     fi
     
     if [[ "$ranges" == *-* ]]; then
-        # Number range (e.g., PT_USERPROC=0-14000=55 or CT_LIMIT=0|10-1000=0)
+        # Number range (e.g., PT_USERPROC=0-14000=55 or CT_LIMIT=0|10-000=0)
         local range_part=$(echo "$ranges" | cut -d'=' -f1)
         
-        # Handle special case like CT_LIMIT=0|10-1000=0
+        # Handle special case like CT_LIMIT=0|10-000=0
         if [[ "$range_part" == *\|* ]]; then
             local special_val=$(echo "$range_part" | cut -d'|' -f1)
             if [ "$value" == "$special_val" ]; then
                 return 0 # 0 is a valid value
             fi
             # Adjust range_part to be the simple range
-            range_part=$(echo "$range_part" | cut -d'|' -f2) # now range_part is 10-1000
+            range_part=$(echo "$range_part" | cut -d'|' -f2) # now range_part is 10-000
         fi
 
         local min=$(echo "$range_part" | cut -d'-' -f1)
@@ -104,24 +104,34 @@ check_sanity() {
     return 0
 }
 
-# --- [NEW] Hardware Offloading Function ---
-# Enables Receive Packet Steering (RPS) to spread network load across all CPUs
-enable_rps() {
+# --- [UPGRADED] Full NIC Hardware Acceleration Function ---
+# Enables RPS (CPU load balancing) and true hardware offloads (GSO, TSO, etc.)
+enable_nic_acceleration() {
     local cpu_cores=$1
     if [ -z "$cpu_cores" ]; then
-        echo "  [FAIL] CPU cores not provided to enable_rps."
+        echo "  [FAIL] CPU cores not provided to enable_nic_acceleration."
         return
     fi
     
     # Detect primary NIC
     local nic=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
     if [ -z "$nic" ]; then
-        echo "  [WARN] Could not detect primary NIC. Skipping RPS (Hardware Offload) tuning."
+        echo "  [WARN] Could not detect primary NIC. Skipping Hardware Offload tuning."
+        return
+    fi
+    
+    # Check for ethtool
+    if ! command -v ethtool &> /dev/null; then
+        echo "  [WARN] `ethtool` not found. Skipping true hardware offloads (TSO, GSO, etc)."
+        echo "  [INFO] To get full 10x performance, please install `ethtool` (e.g., `yum install ethtool`)"
         return
     fi
     
     echo ""
-    echo "Applying Network Hardware Offloads (RPS) for $nic..."
+    echo "Applying Full NIC Hardware Acceleration for $nic..."
+    
+    # --- 1. Apply RPS (Receive Packet Steering) ---
+    # This spreads kernel-level packet processing across all CPUs
     
     # Calculate CPU mask (e.g., 8 cores = 11111111 binary = ff hex)
     local cpu_mask=$(printf '%x' $((2**cpu_cores - 1)))
@@ -141,36 +151,62 @@ enable_rps() {
     done
     
     if [ "$rps_queues_applied" -gt 0 ]; then
-        echo "  [OK] RPS enabled on $rps_queues_applied receive queues."
-        # Create systemd service to make it persistent
-        echo "Creating persistent service file: $RPS_SERVICE_FILE"
-        cat << EOF > "$RPS_SERVICE_FILE"
+        echo "  [OK] RPS (CPU Balancing) enabled on $rps_queues_applied receive queues."
+    else
+        echo "  [WARN] No RPS-compatible queues found for $nic. Skipping RPS."
+    fi
+
+    # --- 2. Apply True Hardware Offloads (Routing, TCP) ---
+    # This moves TCP segmentation and checksumming to the NIC's microprocessor
+    echo "Applying 'ethtool' hardware offloads (Routing & TCP Acceleration)..."
+    ethtool -K $nic rx-checksum on    >/dev/null 2>&1
+    ethtool -K $nic tx-checksum-ipv4 on >/dev/null 2>&1
+    ethtool -K $nic tx-checksum-ipv6 on >/dev/null 2>&1
+    ethtool -K $nic tcp-segmentation-offload on >/dev/null 2>&1
+    ethtool -K $nic generic-segmentation-offload on >/dev/null 2>&1
+    ethtool -K $nic generic-receive-offload on >/dev/null 2>&1
+    echo "  [SET] Enabled: Checksumming, TSO, GSO, GRO"
+    echo "  [OK] Hardware acceleration is now active. (Blue Light)"
+    
+    # --- 3. Create systemd service to make ALL settings persistent ---
+    echo "Creating persistent service file: $RPS_SERVICE_FILE"
+    cat << EOF > "$RPS_SERVICE_FILE"
 [Unit]
-Description=CSF Persistent RPS Tuner (Hardware Offload)
+Description=CSF Full NIC Accelerator (RPS & Ethtool Offloads)
 After=network.target
 
 [Service]
 Type=oneshot
 ExecStart=/bin/bash -c "
-    CPU_CORES=\$(nproc);
-    CPU_MASK=\$(printf '%x' \$((2**CPU_CORES - 1)));
+    # Get primary NIC
     NIC=\$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$5; exit}');
     if [ -n \"\$NIC\" ]; then
+        
+        # 1. Apply RPS CPU Balancing
+        CPU_CORES=\$(nproc);
+        CPU_MASK=\$(printf '%x' \$((2**CPU_CORES - 1)));
         for queue in /sys/class/net/\$NIC/queues/rx-*; do
             [ -f \"\$queue/rps_cpus\" ] && echo \"\$CPU_MASK\" > \"\$queue/rps_cpus\";
         done;
+        
+        # 2. Apply True Hardware Offloads (Routing, TCP)
+        if command -v ethtool &> /dev/null; then
+            ethtool -K \$NIC rx-checksum on;
+            ethtool -K \$NIC tx-checksum-ipv4 on;
+            ethtool -K \$NIC tx-checksum-ipv6 on;
+            ethtool -K \$NIC tcp-segmentation-offload on;
+            ethtool -K \$NIC generic-segmentation-offload on;
+            ethtool -K \$NIC generic-receive-offload on;
+        fi
     fi
 "
 
 [Install]
 WantedBy=multi-user.target
 EOF
-        systemctl daemon-reload
-        systemctl enable "$RPS_SERVICE_FILE" >/dev/null 2>&1
-        echo "  [OK] RPS settings made persistent."
-    else
-        echo "  [WARN] No RPS-compatible queues found for $nic. Skipping."
-    fi
+    systemctl daemon-reload
+    systemctl enable "$RPS_SERVICE_FILE" >/dev/null 2>&1
+    echo "  [OK] Full NIC Acceleration settings made persistent."
 }
 
 # --- Main Execution ---
@@ -223,12 +259,20 @@ echo ""
 declare -A TUNE_SETTINGS
 declare -A KERNEL_SETTINGS
 
+# Set new user-defined defaults for ALL profiles
+TUNE_SETTINGS["RESTRICT_SYSLOG"]="3"
+TUNE_SETTINGS["FASTSTART"]="0"
+TUNE_SETTINGS["CC_LOOKUPS"]="4"
+TUNE_SETTINGS["CC6_LOOKUPS"]="1"
+TUNE_SETTINGS["LF_DISTFTP"]="5"
+TUNE_SETTINGS["PT_LIMIT"]="0" # CRITICAL: Disable old process tracking
+
 case "$PROFILE" in
     "Low Resource")
         echo "Applying 'Low Resource' settings (e.g., VPS, < 2GB RAM)"
         TUNE_SETTINGS["CT_LIMIT"]="100"
         TUNE_SETTINGS["CT_INTERVAL"]="60"   # Slower check
-        TUNE_SETTINGS["CONNLIMIT"]="80;20"
+        TUNE_SETTINGS["CONNLIMIT"]="21;10,22;5,80;20,443;20"
         TUNE_SETTINGS["PT_INTERVAL"]="300"  # Slower check
         TUNE_SETTINGS["PT_USERPROC"]="40"
         TUNE_SETTINGS["PT_USERMEM"]="256" # From sanity.txt
@@ -238,7 +282,6 @@ case "$PROFILE" in
         TUNE_SETTINGS["LF_IPSET_MAXELEM"]="32768"
         TUNE_SETTINGS["DENY_IP_LIMIT"]="200"
         TUNE_SETTINGS["DENY_TEMP_IP_LIMIT"]="100"
-        TUNE_SETTINGS["FASTSTART"]="0"
         TUNE_SETTINGS["DROP_IP_LOGGING"]="0"
         
         # Kernel settings
@@ -249,7 +292,7 @@ case "$PROFILE" in
         echo "Applying 'Balanced' settings (e.g., Standard Server, 2-16GB RAM)"
         TUNE_SETTINGS["CT_LIMIT"]="300"
         TUNE_SETTINGS["CT_INTERVAL"]="30"   # Default check
-        TUNE_SETTINGS["CONNLIMIT"]="150;30,443;20"
+        TUNE_SETTINGS["CONNLIMIT"]="21;10,22;5,53;20,80;30,443;30,3306;15"
         TUNE_SETTINGS["PT_INTERVAL"]="180"  # Default check
         TUNE_SETTINGS["PT_USERPROC"]="55"      # Default from sanity.txt
         TUNE_SETTINGS["PT_USERMEM"]="512"
@@ -259,7 +302,6 @@ case "$PROFILE" in
         TUNE_SETTINGS["LF_IPSET_MAXELEM"]="131072"
         TUNE_SETTINGS["DENY_IP_LIMIT"]="400"
         TUNE_SETTINGS["DENY_TEMP_IP_LIMIT"]="200"
-        TUNE_SETTINGS["FASTSTART"]="1" # Enable faststart
         TUNE_SETTINGS["DROP_IP_LOGGING"]="0"
 
         # Kernel settings
@@ -270,7 +312,8 @@ case "$PROFILE" in
         echo "Applying 'Max Performance' settings (Using 12% resource slice)"
         TUNE_SETTINGS["CT_LIMIT"]="1000"            # Max Sane Connections
         TUNE_SETTINGS["CT_INTERVAL"]="15"           # Aggressive check (15s)
-        TUNE_SETTINGS["CONNLIMIT"]="400;50,443;40"  # High connlimit
+        # New comprehensive CONNLIMIT string
+        TUNE_SETTINGS["CONNLIMIT"]="21;10,22;5,53;20,80;50,443;50,3306;15"
         TUNE_SETTINGS["PT_INTERVAL"]="60"           # Aggressive check (60s)
         TUNE_SETTINGS["PT_USERPROC"]="150"          # Sane limit based on logs
         TUNE_SETTINGS["PT_USERMEM"]="1024"          # Max Sane Memory
@@ -280,7 +323,6 @@ case "$PROFILE" in
         TUNE_SETTINGS["LF_IPSET_MAXELEM"]="196608" # Max RAM for IP sets
         TUNE_SETTINGS["DENY_IP_LIMIT"]="1000"       # Max Sane Perm Deny
         TUNE_SETTINGS["DENY_TEMP_IP_LIMIT"]="1000"  # Max Sane Temp Deny
-        TUNE_SETTINGS["FASTSTART"]="1"              # CRITICAL: Enable faststart
         TUNE_SETTINGS["DROP_IP_LOGGING"]="0"        # Reduce log I/O
         
         # Kernel settings: Use 12% RAM slice
@@ -292,8 +334,8 @@ case "$PROFILE" in
         KERNEL_SETTINGS["net.netfilter.nf_conntrack_max"]="$CONNTRACK_MAX"
         KERNEL_SETTINGS["net.netfilter.nf_conntrack_buckets"]="$CONNTRACK_BUCKETS"
         
-        # [NEW] Call the RPS/Offloading function
-        enable_rps "$CPU_CORES"
+        # Call the Full NIC Acceleration function
+        enable_nic_acceleration "$CPU_CORES"
         ;;
 esac
 
