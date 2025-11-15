@@ -29,7 +29,7 @@ ChangeLog:
 		Integrated new secure API endpoints (downloader.php and
 		version_check.php) to validate purchases.
 		All product updates and version checks for v2.15.xx now require
-		a valid serial KEY "SPONSOR_LICENSE" key for authentication.
+		a valid serial KEY for authentication.
 
 		Revolutionary Technology's Hardware offloading engine activates
 		NIC microprocessors to handle all packet filtering. This frees server CPU
