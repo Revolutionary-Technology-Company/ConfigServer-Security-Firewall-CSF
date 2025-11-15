@@ -95,10 +95,9 @@ else
     echo
 fi
 #
-# --- [Revolutionary Tech] Install Tarpit Dependencies (Multi-Distro) ---
+# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
 #
 print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
-MODPROBE_FAILED=0
 rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
 
 if [ -f /usr/bin/apt-get ]; then
@@ -108,22 +107,7 @@ if [ -f /usr/bin/apt-get ]; then
     # Install dependencies for signing and building
     apt-get update -y > /dev/null 2>&1
     apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
     # --- This is a Red Hat, CentOS, or AlmaLinux system ---
@@ -131,27 +115,39 @@ elif [ -f /usr/bin/yum ]; then
     yum install epel-release -y > /dev/null 2>&1
     # Install dependencies for signing and building
     yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 else
     print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
 fi
-#
-# --- [Revolutionary Tech] End Tarpit Dependencies ---
+
+# --- [Revolutionary Tech] Secure Boot Module Signing ---
+# This block checks if Secure Boot is on. If it is, it runs the signing script.
+print "    > Checking Secure Boot state..."
+if command -v mokutil >/dev/null 2>&1; then
+    if mokutil --sb-state | grep -q "SecureBoot enabled"; then
+        print "    > Secure Boot is ENABLED. Running kernel module signer..."
+        if [ -f "rt-sign-module.sh" ]; then
+            chmod 700 rt-sign-module.sh
+            ./rt-sign-module.sh
+        else
+            print "    ${redl}ERROR:${greym} rt-sign-module.sh not found. Cannot sign modules."
+        fi
+    else
+        print "    > Secure Boot is disabled or not supported. Skipping module signing."
+    fi
+else
+    print "    > mokutil not found. Cannot determine Secure Boot state. Skipping module signing."
+fi
+
+# --- [Revolutionary Tech] Final Module Load Test ---
+print "    > Loading xt_TARPIT module..."
+if ! modprobe xt_TARPIT; then
+    print "    ${redl}WARNING:${greym} Failed to load xt_TARPIT module. Tarpit functionality may not work."
+    echo "1" > /tmp/rt_tarpit_failed
+else
+    print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
+fi
+# --- [Revolutionary Tech] End Tarpit Block ---
 #
 
 mkdir -v -m 0600 /etc/csf
@@ -514,8 +510,12 @@ cp -avf uninstall.interworx.sh /usr/local/csf/bin/uninstall.sh
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
-cp -avf sanity.txt /usr/local/csf/lib/
-cp -avf sanity.txt /etc/csf/
+#
+# --- [Revolutionary Tech] Fix sanity.txt path ---
+# Was: cp -avf sanity.txt /usr/local/csf/lib/
+# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
+cp -avf sanity.txt /etc/csf/sanity.txt
+#
 cp -avf csf.rbls /usr/local/csf/lib/
 cp -avf restricted.txt /usr/local/csf/lib/
 cp -avf changelog.txt /etc/csf/
@@ -778,7 +778,7 @@ if [ -f "$CSF_WEBMIN_FILE_ACL" ]; then
 	# #
 
 	if grep '^ssl=' "$WEBMIN_CONF" | cut -d= -f2 | grep -q '^1$'; then
-		WEBMIN_PROTO="https"
+		WEBMIN_PROTO="https."
 	else
 		WEBMIN_PROTO="http"
 	fi
@@ -916,3 +916,5 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
+
+}

@@ -101,10 +101,9 @@ else
     echo
 fi
 #
-# --- [Revolutionary Tech] Install Tarpit Dependencies (Multi-Distro) ---
+# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
 #
 print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
-MODPROBE_FAILED=0
 rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
 
 if [ -f /usr/bin/apt-get ]; then
@@ -114,22 +113,7 @@ if [ -f /usr/bin/apt-get ]; then
     # Install dependencies for signing and building
     apt-get update -y > /dev/null 2>&1
     apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
     # --- This is a Red Hat, CentOS, or AlmaLinux system ---
@@ -137,27 +121,39 @@ elif [ -f /usr/bin/yum ]; then
     yum install epel-release -y > /dev/null 2>&1
     # Install dependencies for signing and building
     yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 else
     print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
 fi
-#
-# --- [Revolutionary Tech] End Tarpit Dependencies ---
+
+# --- [Revolutionary Tech] Secure Boot Module Signing ---
+# This block checks if Secure Boot is on. If it is, it runs the signing script.
+print "    > Checking Secure Boot state..."
+if command -v mokutil >/dev/null 2>&1; then
+    if mokutil --sb-state | grep -q "SecureBoot enabled"; then
+        print "    > Secure Boot is ENABLED. Running kernel module signer..."
+        if [ -f "rt-sign-module.sh" ]; then
+            chmod 700 rt-sign-module.sh
+            ./rt-sign-module.sh
+        else
+            print "    ${redl}ERROR:${greym} rt-sign-module.sh not found. Cannot sign modules."
+        fi
+    else
+        print "    > Secure Boot is disabled or not supported. Skipping module signing."
+    fi
+else
+    print "    > mokutil not found. Cannot determine Secure Boot state. Skipping module signing."
+fi
+
+# --- [Revolutionary Tech] Final Module Load Test ---
+print "    > Loading xt_TARPIT module..."
+if ! modprobe xt_TARPIT; then
+    print "    ${redl}WARNING:${greym} Failed to load xt_TARPIT module. Tarpit functionality may not work."
+    echo "1" > /tmp/rt_tarpit_failed
+else
+    print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
+fi
+# --- [Revolutionary Tech] End Tarpit Block ---
 #
 
 mkdir -v -m 0600 /etc/csf
@@ -525,8 +521,12 @@ cp -avf uninstall.cyberpanel.sh /usr/local/csf/bin/uninstall.sh
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
-cp -avf sanity.txt /usr/local/csf/lib/
-cp -avf sanity.txt /etc/csf/
+#
+# --- [Revolutionary Tech] Fix sanity.txt path ---
+# Was: cp -avf sanity.txt /usr/local/csf/lib/
+# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
+cp -avf sanity.txt /etc/csf/sanity.txt
+#
 cp -avf csf.rbls /usr/local/csf/lib/
 cp -avf restricted.txt /usr/local/csf/lib/
 cp -avf changelog.txt /etc/csf/
@@ -650,522 +650,4 @@ else
         ln -svf /etc/init.d/csf /etc/rc.d/rc5.d/S80csf
         ln -svf /etc/init.d/lfd /etc/rc.d/rc3.d/S85lfd
         ln -svf /etc/init.d/lfd /etc/rc.d/rc4.d/S85lfd
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc5.d/S85lfd
-    else
-        /sbin/chkconfig lfd on
-        /sbin/chkconfig csf on
-    fi
-fi
-
-# #
-#	Step > Permissions
-# #
-
-prinp "${APP_NAME_SHORT:-CSF} > File Permissions" \
-       "This step ensures that your ${APP_NAME_SHORT:-CSF} files contain the correct folder and file permissions."
-
-# #
-#   List of directories to set ownership
-# #
-
-dirs="/etc/csf /var/lib/csf /usr/local/csf"
-
-# #
-#   List of individual files to set ownership
-# #
-
-files="/usr/sbin/csf /usr/sbin/lfd /etc/logrotate.d/lfd /etc/cron.d/csf-cron /etc/cron.d/lfd-cron /usr/local/man/man1/csf.1 /usr/lib/systemd/system/lfd.service /usr/lib/systemd/system/csf.service /etc/init.d/lfd /etc/init.d/csf"
-
-# #
-#   Set ownership for directories
-# #
-
-CSF_CHOWN_GENERAL="root:root"
-
-for dir in $dirs; do
-    if [ -d "$dir" ]; then
-        chown -Rf "${CSF_CHOWN_GENERAL}" "$dir"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for folder ${bluel}${dir}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; folder does not exist: ${yellowl}${dir}${greym}"
-    fi
-done
-
-# #
-#   Set ownership for individual files
-# #
-
-for file in $files; do
-    if [ -e "$file" ]; then
-        chown -f "${CSF_CHOWN_GENERAL}" "$file"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for file ${bluel}${file}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; file does not exist: ${yellowl}${file}${greym}"
-    fi
-done
-
-mkdir -vp /usr/local/CyberCP/public/static/configservercsf/
-cp -avf csf/* /usr/local/CyberCP/public/static/configservercsf/
-cp -avf csf/* cyberpanel/configservercsf/static/configservercsf/
-chmod 755 /usr/local/CyberCP/public/static/configservercsf/
-
-cp cyberpanel/cyberpanel.pl /usr/local/csf/bin/
-chmod 700 /usr/local/csf/bin/cyberpanel.pl
-cp -avf cyberpanel/configservercsf /usr/local/CyberCP/
-
-mkdir /home/cyberpanel/plugins
-touch /home/cyberpanel/plugins/configservercsf
-
-# #
-#	Cyberpanel Structure Reference
-#		
-#	stat -c "%n %U:%G %a" /usr/local/CyberCP/CyberCP/*
-#		/usr/local/CyberCP/CyberCP/__init__.py 			root:root 		644
-#		/usr/local/CyberCP/CyberCP/__pycache__ 			root:root 		755
-#		/usr/local/CyberCP/CyberCP/secMiddleware.py 	root:root 		644
-#		/usr/local/CyberCP/CyberCP/SecurityLevel.py 	root:root 		644
-#		/usr/local/CyberCP/CyberCP/settings.py 			root:cyberpanel 640
-#		/usr/local/CyberCP/CyberCP/urls.py 				root:root 		644
-#		/usr/local/CyberCP/CyberCP/wsgi.py 				root:root 		644
-# #
-
-# #
-#	Open
-#		/usr/local/CyberCP/CyberCP/settings.py
-#	
-#	Find
-#		'pluginHolder',
-#	
-#	Add Above
-#		'configservercsf',
-#	
-#	
-#	@target			/usr/local/CyberCP/CyberCP/settings.py
-#	@perms			root:cyberpanel 640
-# #
-
-SETTINGSPY_FILE="/usr/local/CyberCP/CyberCP/settings.py"
-if [ -f "$SETTINGSPY_FILE" ]; then
-    if ! grep "configservercsf" "$SETTINGSPY_FILE" >/dev/null 2>&1; then
-        SETTINGSPY_TEMP="/tmp/settings.py.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$SETTINGSPY_TEMP" ]; do
-            SETTINGSPY_TEMP="/tmp/settings.py.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission + owner:group to restore after patched
-		#		settings.py requires root:cyberpanel 0640
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            # GNU stat (Linux)
-            FILE_MODE=$(stat -c %a "$SETTINGSPY_FILE")
-            FILE_OWNER=$(stat -c %u "$SETTINGSPY_FILE")
-            FILE_GROUP=$(stat -c %g "$SETTINGSPY_FILE")
-        else
-            # BSD/macOS stat
-            FILE_MODE=$(stat -f %Lp "$SETTINGSPY_FILE")
-            FILE_OWNER=$(stat -f %u "$SETTINGSPY_FILE")
-            FILE_GROUP=$(stat -f %g "$SETTINGSPY_FILE")
-        fi
-
-        trap 'rm -f "$SETTINGSPY_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert 'configservercsf' above pluginHolder
-		# #
-
-        sed "/pluginHolder/ i \
-    \ \ \ \ 'configservercsf'," "$SETTINGSPY_FILE" > "$SETTINGSPY_TEMP" \
-            && mv "$SETTINGSPY_TEMP" "$SETTINGSPY_FILE" \
-            && chown "$FILE_OWNER:$FILE_GROUP" "$SETTINGSPY_FILE" \
-            && chmod "$FILE_MODE" "$SETTINGSPY_FILE"
-
-        echo "  CSF [CyberPanel]: Add configservercsf above pluginHolder in $SETTINGSPY_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip configservercsf above pluginHolder in $SETTINGSPY_FILE"
-    fi
-fi
-
-# #
-#	Open
-#		/usr/local/CyberCP/CyberCP/urls.py
-#	
-#	Find
-#		path('plugins/', include('pluginHolder.urls')),
-#	
-#	Add Above
-#		path('configservercsf/',include('configservercsf.urls')),
-#	
-#	@target			/usr/local/CyberCP/CyberCP/urls.py
-#	@perms			root:root 644
-# #
-
-URLSPY_FILE="/usr/local/CyberCP/CyberCP/urls.py"
-if [ -f "$URLSPY_FILE" ]; then
-    if ! grep "configservercsf" "$URLSPY_FILE" >/dev/null 2>&1; then
-        URLSPY_TEMP="/tmp/urls.py.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$URLSPY_TEMP" ]; do
-            URLSPY_TEMP="/tmp/urls.py.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$URLSPY_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$URLSPY_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$URLSPY_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert the CSF URL above pluginHolder
-		# #
-
-        sed "/pluginHolder/ i \
-    \ \ \ \ path('configservercsf/',include('configservercsf.urls'))," \
-            "$URLSPY_FILE" > "$URLSPY_TEMP" \
-            && mv "$URLSPY_TEMP" "$URLSPY_FILE" \
-            && chmod "$FILE_MODE" "$URLSPY_FILE"
-
-        echo "  CSF [CyberPanel]: Add configservercsf.urls above pluginHolder.urls in $URLSPY_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip configservercsf.urls above pluginHolder.urls in $URLSPY_FILE"
-    fi
-fi
-
-# #
-#	if ! cat /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html | grep -q configservercsf; then
-#   	sed -i "/url 'csf'/ i <li><a href='/configservercsf/' title='ConfigServer Security and Firewall'><span>ConfigServer Security \&amp; Firewall</span></a></li>" /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	fi
-# #
-
-# #
-#	This is for older versions of Cyberpanel, not needed in newer releases.
-#	
-#   Open:
-#       /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	
-#   Find:
-#       <a href="#" title="{% trans 'Plugins' %}">
-#	
-#   Insert New (above it):
-#       {% include "/usr/local/CyberCP/configservercsf/templates/configservercsf/menu.html" %}
-#	
-#	@target			/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	@perms			root:root 644
-# #
-
-BASEINDEX_FILE="/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html"
-if [ -f "$BASEINDEX_FILE" ]; then
-    if ! grep "configserver" "$BASEINDEX_FILE" >/dev/null 2>&1; then
-        BASEINDEX_TEMP="/tmp/index.html.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$BASEINDEX_TEMP" ]; do
-            BASEINDEX_TEMP="/tmp/index.html.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$BASEINDEX_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$BASEINDEX_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$BASEINDEX_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert the CSF menu include above the Plugins line
-		# #
-
-        sed "/trans 'Plugins'/ i \
-\{\% include \"/usr/local/CyberCP/configservercsf/templates/configservercsf/menu.html\" \%\}" \
-            "$BASEINDEX_FILE" > "$BASEINDEX_TEMP" \
-            && mv "$BASEINDEX_TEMP" "$BASEINDEX_FILE" \
-            && chmod "$FILE_MODE" "$BASEINDEX_FILE"
-
-        echo "  CSF [CyberPanel]: Add legacy csf menu include in $BASEINDEX_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip legacy csf menu include - already present in ($BASEINDEX_FILE)"
-    fi
-else
-    echo "  CSF [CyberPanel]: Skip legacy csf menu include - file not found ($BASEINDEX_FILE)"
-fi
-
-# #
-#	Open
-#		/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	
-#	Find
-#		<a href="{% url 'imunify' %}" class="menu-item">
-#			<span>Imunify 360</span>
-#		</a>
-#	
-#	Add Above
-#		<a href="{% url 'configservercsf' %}" class="menu-item">
-#			<span>CSF</span>
-#		</a>
-#	
-#	@target			/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	@perms			root:root 644
-#	@todo			Make POSIX compliant
-# #
-
-if ! grep -q "configservercsf" /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html; then
-	sed -i '/url '\''imunify'\''/ i \
-				<a href="{% url '\''configservercsf'\'' %}" class="menu-item">\
-					<span>CSF</span>\
-				</a>' /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-fi
-
-# #
-#	Cyberpanel > Backardards Compatibility > path to url
-#	
-#	In Django 2.x+, URL routing switched from the old url() function to the newer path().
-#	which means older versions of Cyberpabel require url().
-#	
-#	Check the target file to see if we need to convert back to the old url() method.
-#	
-#	Change
-#		from django.urls import path
-#	
-#	To
-#		from django.conf.urls import url
-#	
-#	@target			/usr/local/CyberCP/CyberCP/urls.py
-#	@perms			root:root 644
-#	@todo			Make POSIX compliant
-# #
-
-if grep -q "import url" /usr/local/CyberCP/CyberCP/urls.py; then
-    sed -i \
-        -e "s/from django\.urls import path/from django.conf.urls import url/g" \
-        -e "s|path('', views.configservercsf, name='configservercsf')|url(r'^$', views.configservercsf, name='configservercsf')|g" \
-        -e "s|path('iframe', views.configservercsfiframe, name='configservercsfiframe')|url(r'^iframe/$', views.configservercsfiframe, name='configservercsfiframe')|g" \
-        -e "s/path(/url(/g" \
-        /usr/local/CyberCP/CyberCP/urls.py
-
-    echo "  CSF [CyberPanel]: Add Backwards Compaibility - path() => url()"
-else
-    echo "  CSF [CyberPanel]: Skip Backwards Compaibility - using path()"
-fi
-
-# #
-#	Saving form on "Firewall Configuration" page will toss the following error:
-#		{"error_message": "Data supplied is not accepted, following characters are not allowed in the input ` $ & ( ) [ ] { } ; : 
-#			\u2018 < >.", "errorMessage": "Data supplied is not accepted, following characters are not allowed in the input ` $ & ( ) [ ] { } ; : \u2018 < >."}
-#	
-#	Around 07/25, Cyberpabel removed path "configservercsf" from whitelisted path.
-#	Manually re-add exception.
-#	
-#	Adds:
-#                   if not isAPIEndpoint and valueAlreadyChecked == 0:
-#	
-#                       if 'configservercsf' in pathActual:
-#                           continue
-#	
-#	@target			/usr/local/CyberCP/CyberCP/secMiddleware.py
-#	@perms			root:root 644
-# #
-
-SECMID_FILE="/usr/local/CyberCP/CyberCP/secMiddleware.py"
-SECMID_TARGET_IF="if not isAPIEndpoint and valueAlreadyChecked == 0:"
-BYPASS_LINE="                        if 'configservercsf' in pathActual:"
-BYPASS_CONT="                            continue"
-
-if [ -f "$SECMID_FILE" ]; then
-    printf '\n'
-    printf '  CSF [CyberPanel]: Start secMiddleware.py - security exception...\n'
-
-	# #
-    #	Skip if exception already present
-	# #
-
-    if grep "if 'configservercsf' in pathActual" "$SECMID_FILE" >/dev/null 2>&1; then
-        printf '  CSF [CyberPanel]: Skip secMiddleware.py - security exception already present\n'
-    else
-		# #
-		#	Backup
-		# #
-
-		SECMID_BACKUP="${SECMID_FILE}.bak.$$"
-		cp -p "$SECMID_FILE" "$SECMID_BACKUP" ||
-		{
-			printf '  CSF [CyberPanel]: Fail secMiddleware.py - cannot create backup %s\n' "$SECMID_BACKUP"
-			exit 1
-		}
-
-        SECMID_TEMP="${SECMID_FILE}.tmp.$$"
-        i=1
-
-        while [ -e "$SECMID_TEMP" ]; do
-            SECMID_TEMP="${SECMID_FILE}.tmp.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$SECMID_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$SECMID_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$SECMID_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert bypass after every target line
-		# #
-
-        while IFS= read -r line || [ -n "$line" ]; do
-            printf '%s\n' "$line" >>"$SECMID_TEMP"
-
-            case "$line" in
-                *"$SECMID_TARGET_IF"*)
-                    printf '%s\n' '' >>"$SECMID_TEMP"
-                    printf '%s\n' "$BYPASS_LINE" >>"$SECMID_TEMP"
-                    printf '%s\n' "$BYPASS_CONT" >>"$SECMID_TEMP"
-                    printf '%s\n' '' >>"$SECMID_TEMP"
-                    ;;
-            esac
-        done <"$SECMID_FILE"
-
-        if cp -p "$SECMID_TEMP" "$SECMID_FILE"; then
-
-			# #
-            #	Restore original permissions
-			# #
-
-            chmod "$FILE_MODE" "$SECMID_FILE"
-            printf '  CSF [CyberPanel]: Add secMiddleware.py - exception after every occurrence of %s.\n' "'$SECMID_TARGET_IF'"
-        else
-            printf '  CSF [CyberPanel]: Fail secMiddleware.py - cannot write patched file — restoring backup.\n'
-            cp -p "$SECMID_BACKUP" "$SECMID_FILE" >/dev/null 2>&1 || true
-            exit 1
-        fi
-
-        trap - EXIT INT TERM
-        rm -f "$SECMID_TEMP"
-    fi
-else
-    printf '  CSF [CyberPanel]: Skip secMiddleware.py  -- target file not found (%s)\n' "$SECMID_FILE"
-fi
-
-# #
-#	Step > csf.conf Modified Settings
-#   
-#   SYSLOG_LOG          By default, RHEL systems use /var/log/messages
-#                       Debian systems use /var/log/syslog
-#	
-#	IPTABLES_LOG		The same as SYSLOG_LOG
-# #
-
-prinp "${APP_NAME_SHORT:-CSF} > Customize csf.config" \
-       "This step will check which Linux distribution family you are running, RHEL (Red Hat) or a Debian-based system. This determines what your default " \
-	   "logging paths will be."
-
-# #
-#   Detect system log file path
-# #
-
-SYSLOG_PATH=""
-
-if [ -f /var/log/syslog ]; then
-    SYSLOG_PATH="/var/log/syslog"
-elif [ -f /var/log/messages ]; then
-    SYSLOG_PATH="/var/log/messages"
-else
-    SYSLOG_PATH="/dev/null"
-fi
-
-# #
-#   Update SYSLOG_LOG and IPTABLES_LOG defaults
-#   
-#   Only change these values during installation.
-#   Users can manually edit csf.conf later, and those
-#   settings will not be overridden by updates.
-# #
-
-for KEY in SYSLOG_LOG IPTABLES_LOG; do
-    if grep -qE "^${KEY}" "${CSF_CONF}"; then
-        # Update existing line
-        sed -i "s|^${KEY}.*|${KEY} = \"${SYSLOG_PATH}\"|" "${CSF_CONF}"
-		ok "    Updating ${greenl}${CSF_CONF}${greym} setting ${fuchsial}${KEY}=${white}\"${bluel}${SYSLOG_PATH}${white}\"${greym}"
-    else
-        # Append if missing
-        echo "${KEY} = \"${SYSLOG_PATH}\"" >> "${CSF_CONF}"
-		ok "    Appending ${greenl}${CSF_CONF}${greym} setting ${fuchsial}${KEY}=${white}\"${bluel}${SYSLOG_PATH}${white}\"${greym}"
-    fi
-done
-
-# #
-#	Check current value of
-#		TESTING="0"
-# #
-
-TESTING_VALUE=$(grep '^[[:space:]]*TESTING[[:space:]]*=' "$CSF_CONF" | awk -F= '{gsub(/ /,"",$2); print $2}' | tr -d '"')
-
-prinp "${APP_NAME_SHORT:-CSF} > Installation Complete" \
-       "Your installation is complete. Read important notes below."
-
-print "    For more information on how to use ${APP_NAME_SHORT:-CSF}; visit"
-print "        ${yellowd}${APP_LINK_DOCS:-https://docs.configserver.shop}"
-if [ -f "$CSF_CONF" ]; then
-	print "    "
-	print "    The next step in the process should be to open the config file located at"
-	print "        ${yellowd}${CSF_CONF}"
-	if [ "$TESTING_VALUE" = "1" ]; then
-	print "    "
-	print "    The setting ${yellowd}TESTING${greym} is currently ${greenl}enabled${greym}; you should open your config and"
-	print "    disable this setting before to you begin using your new firewall."
-	print "    To disable this setting, open ${yellowd}${CSF_CONF}${greym} and set the following:"
-	print "        ${fuchsial}TESTING = ${white}\"${bluel}0${white}\"${greym}"
-	else
-	print "    "
-	print "    The setting ${yellowd}TESTING${greym} is currently ${redl}disabled${greym}; which is the"
-	print "    correct setting if you plan to start using your firewall."
-	fi
-else
-	print "    "
-	print "    An error has occured; we cannot locate your ${APP_NAME_SHORT:-CSF} config file:"
-	print "        ${yellowd}${CSF_CONF}"
-	print "    "
-	print "    You must have a valid config in the correct location before ${APP_NAME_SHORT:-CSF} will"
-	print "    function properly."
-fi
-print
-print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart ${APP_NAME_SHORT:-CSF} with:"
-print "        ${yellowd}sudo csf -ra"
-print
-print
+        ln -svf /etc/init.d/lfd /etc/rc.d/rc5.d/S8Next, update this file: `install.cyberpanel.sh`

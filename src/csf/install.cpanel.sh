@@ -107,11 +107,11 @@ if [ "$RETURN" = 1 ]; then
 else
     echo "...Perl modules OK"
 fi
+
 #
-# --- [Revolutionary Tech] Install Tarpit Dependencies (Multi-Distro) ---
+# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
 #
 print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
-MODPROBE_FAILED=0
 rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
 
 if [ -f /usr/bin/apt-get ]; then
@@ -121,22 +121,7 @@ if [ -f /usr/bin/apt-get ]; then
     # Install dependencies for signing and building
     apt-get update -y > /dev/null 2>&1
     apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
     # --- This is a Red Hat, CentOS, or AlmaLinux system ---
@@ -144,27 +129,39 @@ elif [ -f /usr/bin/yum ]; then
     yum install epel-release -y > /dev/null 2>&1
     # Install dependencies for signing and building
     yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    
-    # Try to load the module and capture its error message
-    MODPROBE_ERROR=$(modprobe xt_TARPIT 2>&1)
-    
-    if [ $? -ne 0 ]; then
-        # Module failed to load. Check why.
-        if echo "$MODPROBE_ERROR" | grep -qE "Required key not available|Key was rejected by service"; then
-            print "    > modprobe failed. Secure Boot signing required."
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}WARNING:${greym} modprobe failed: $MODPROBE_ERROR"
-            echo "1" > /tmp/rt_tarpit_failed
-        fi
-    fi
-    print "    [+] Tarpit dependencies installed."
+    print "    > Dependencies installed."
 else
     print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
 fi
-#
-# --- [Revolutionary Tech] End Tarpit Dependencies ---
+
+# --- [Revolutionary Tech] Secure Boot Module Signing ---
+# This block checks if Secure Boot is on. If it is, it runs the signing script.
+print "    > Checking Secure Boot state..."
+if command -v mokutil >/dev/null 2>&1; then
+    if mokutil --sb-state | grep -q "SecureBoot enabled"; then
+        print "    > Secure Boot is ENABLED. Running kernel module signer..."
+        if [ -f "rt-sign-module.sh" ]; then
+            chmod 700 rt-sign-module.sh
+            ./rt-sign-module.sh
+        else
+            print "    ${redl}ERROR:${greym} rt-sign-module.sh not found. Cannot sign modules."
+        fi
+    else
+        print "    > Secure Boot is disabled or not supported. Skipping module signing."
+    fi
+else
+    print "    > mokutil not found. Cannot determine Secure Boot state. Skipping module signing."
+fi
+
+# --- [Revolutionary Tech] Final Module Load Test ---
+print "    > Loading xt_TARPIT module..."
+if ! modprobe xt_TARPIT; then
+    print "    ${redl}WARNING:${greym} Failed to load xt_TARPIT module. Tarpit functionality may not work."
+    echo "1" > /tmp/rt_tarpit_failed
+else
+    print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
+fi
+# --- [Revolutionary Tech] End Tarpit Block ---
 #
 
 mkdir -v -m 0600 /var/lib/csf
@@ -182,11 +179,11 @@ mkdir -v -m 0600 /usr/local/csf/tpl
 
 # Revolutionary Technology Control
 print "    Providing immediate DDoS protection from Revlutionary Technology..."
-sysctl -w net.ipv4.tcp_syncookies=1
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
-sysctl -p
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
+sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
+echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
+sysctl -p > /dev/null 2>&1
+iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
+iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
 print "    Installing Revolutionary Technology pre-install scripts..."
 mkdir -p -m 0755 /usr/local/include/csf/pre.d/
 cp -avf stressengine.sh /usr/local/include/csf/pre.d/
@@ -393,7 +390,7 @@ if [ ! -e "/usr/local/csf/tpl/apache.http.txt" ]; then
 	cp -avf apache.http.txt /usr/local/csf/tpl/.
 fi
 if [ ! -e "/usr/local/csf/tpl/apache.https.txt" ]; then
-	cp -avf apache.https.txt /usr/local/csf/tpl/.
+	cp -avf apache.httpsf.txt /usr/local/csf/tpl/.
 fi
 if [ ! -e "/usr/local/csf/tpl/litespeed.main.txt" ]; then
 	cp -avf litespeed.main.txt /usr/local/csf/tpl/.
@@ -498,13 +495,13 @@ ln -svf /usr/local/csf/lib/webmin /etc/csf/
 if [ ! -e "/etc/csf/alerts" ]; then
     ln -svf /usr/local/csf/tpl /etc/csf/alerts
 fi
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd > /dev/null 2>&1
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf > /dev/null 2>&1
 
-mkdir webmin/csf/images
-mkdir ui/images
-mkdir da/images
-mkdir interworx/images
+mkdir -p webmin/csf/images
+mkdir -p ui/images
+mkdir -p da/images
+mkdir -p interworx/images
 
 cp -avf csf/* webmin/csf/images/
 cp -avf csf/* ui/images/
@@ -517,8 +514,12 @@ cp -avf uninstall.sh /usr/local/csf/bin/
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
-cp -avf sanity.txt /usr/local/csf/lib/
-cp -avf sanity.txt /etc/csf/
+#
+# --- [Revolutionary Tech] Fix sanity.txt path ---
+# Was: cp -avf sanity.txt /usr/local/csf/lib/
+# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
+cp -avf sanity.txt /etc/csf/sanity.txt
+#
 cp -avf csf.rbls /usr/local/csf/lib/
 cp -avf restricted.txt /usr/local/csf/lib/
 cp -avf changelog.txt /etc/csf/
@@ -565,7 +566,7 @@ chmod -R 600 /usr/local/csf/profiles
 chmod 600 /var/log/lfd.log*
 
 chmod -v 700 /usr/local/csf/bin/*.pl /usr/local/csf/bin/*.sh /usr/local/csf/bin/*.pm
-chmod -v 700 /etc/csf/*.pl /etc/csf/*.cgi /etc/csf/*.sh /etc/csf/*.php /etc/csf/*.py
+chmod -v 700 /etc/csf/*.pl
 chmod -v 700 /etc/csf/webmin/csf/index.cgi
 chmod -v 644 /etc/cron.d/lfd-cron
 chmod -v 644 /etc/cron.d/csf-cron
@@ -577,17 +578,16 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.pl
 ./auto.pl $OLDVERSION
 
-mkdir /usr/local/cpanel/whostmgr/docroot/cgi/configserver
+mkdir -p /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf
 chmod 700 /usr/local/cpanel/whostmgr/docroot/cgi/configserver
-mkdir /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf
 chmod 700 /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf
 
 cp -avf cpanel/csf.cgi /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf.cgi
 chmod -v 700 /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf.cgi
 
-cp -avf csf/ /usr/local/cpanel/whostmgr/docroot/cgi/configserver/
+cp -avf csf/* /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/
 cp -avf cpanel/Driver /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/
-cp -avf ui/images/icon.gif /usr/local/cpanel/whostmgr/docroot/themes/x/icons/csf.gif
+# cp -avf ui/images/icon.gif /usr/local/cpanel/whostmgr/docroot/themes/x/icons/csf.gif
 cp -avf cpanel/csf.tmpl /usr/local/cpanel/whostmgr/docroot/templates/
 
 VERSION=`cat /usr/local/cpanel/version | cut -d '.' -f2`
@@ -658,17 +658,17 @@ then
     cp -avf lfd.service /usr/lib/systemd/system/
     cp -avf csf.service /usr/lib/systemd/system/
 
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service > /dev/null 2>&1
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service > /dev/null 2>&1
 
     systemctl daemon-reload
 
-    systemctl enable csf.service
-    systemctl enable lfd.service
+    systemctl enable csf.service > /dev/null 2>&1
+    systemctl enable lfd.service > /dev/null 2>&1
 
-    systemctl disable firewalld
-    systemctl stop firewalld
-    systemctl mask firewalld
+    systemctl disable firewalld > /dev/null 2>&1
+    systemctl stop firewalld > /dev/null 2>&1
+    systemctl mask firewalld > /dev/null 2>&1
 else
     cp -avf lfd.sh /etc/init.d/lfd
     cp -avf csf.sh /etc/init.d/csf
