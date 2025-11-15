@@ -545,7 +545,40 @@ EOF
         fi
     fi
 
-    # --- Install Google Block Reporter (Community Defense)---
+    # --- Install Google Block Reporter ---
+	# This script runs as a cron job to report malicious domains
+	# (discovered via rDNS from blocked IPs) to the Google Web Risk API
+	# as a community defense contribution. This tools is ONLY intended for use in notifying
+	# network administrators that a malicious attack has come from their network. Some
+	# malicious connections come from innocent shared hosts. Shared hosts will be notified
+	# with this reporter, that a bad actor exists on their network. This is not designed
+	# to block or prevent legitimate traffic.
+	#
+	# Google's Safe Browsing technology constantly checks reported safe and unsafe websites to verify threats.
+	# It uses AI and machine learning to scan billions of URLs daily, identifies malicious scripts and content, 
+	# and adds dangerous sites to a list that major browsers use to warn users. If a site is flagged, a website
+	# owner can use Google Search Console to request a review after cleaning up the site. 
+	# How Google checks websites
+	#
+	# Daily scanning: Google scans its web index daily, and its Safe Browsing technology checks billions
+	# of URLs each day for unsafe websites.
+	# Automated analysis: Artificial intelligence (AI) is used to identify patterns of fraudulent content,
+	# distinguishing legitimate from harmful sites at scale.
+	# Threat detection: The checks are designed to find malicious scripts, downloads, viruses, and 
+	# content that violates policies.
+	# Real-time checks: Safe Browsing performs real-time checks against lists of known phishing and 
+	# malware sites and can even perform deeper scans on downloaded files. 
+	#
+	# What happens to reported sites
+	#
+	# Sites are flagged or blocked: When a dangerous site is detected, it can be labeled as dangerous
+	# in search results or added to the Safe Browsing list, which browsers use to warn users.
+	# Owners can request a review: If a website is flagged, the owner can go to the Security issues section
+	# in Google Search Console and request a review after they have cleaned up the site. 
+	#
+	# Check the status of a website on Google Safe Sites: https://transparencyreport.google.com/safe-browsing/search
+	# Why would a page be reported to Google Sage Sites? https://support.google.com/webmasters/answer/6347750?hl=en
+	#
     if [ ! -f "$BLOCK_REPORTER_SCRIPT" ]; then
         print "    ${redl}[ERROR]${greym} $BLOCK_REPORTER_SCRIPT not found. Skipping Block Reporter."
     else
