@@ -2,9 +2,10 @@
 #
 # CSF Auto-Tuner (csf-autotune.sh)
 #
-# This script dynamically tunes /etc/csf/csf.conf settings AND
-# kernel-level netfilter/offloading settings based on available system resources.
-# It respects the validation rules in /etc/csf/sanity.txt.
+# This script is a Hardware Acceleration Activator.
+# 1. It checks and loads required kernel modules (drivers).
+# 2. It applies kernel-level hardware offloads (routing, TCP, CPU balancing).
+# 3. It tunes csf.conf to use these hardware features (12% model).
 #
 # Developed for Revolutionary Technology & Aetherinox
 #
@@ -13,7 +14,7 @@ CONF_FILE="/etc/csf/csf.conf"
 SANITY_FILE="/etc/csf/sanity.txt"
 BACKUP_FILE="/etc/csf/csf.conf.autotune.bak"
 KERNEL_TUNE_FILE="/etc/sysctl.d/99-csf-tuning.conf"
-RPS_SERVICE_FILE="/etc/systemd/system/csf-nic-accelerator.service" # Renamed service
+RPS_SERVICE_FILE="/etc/systemd/system/csf-nic-accelerator.service"
 
 # --- Helper Functions ---
 
@@ -32,6 +33,19 @@ update_config() {
     sed -i -E "s|^(\s*$key\s*=\s*)\".*\"|\1\"$value\"|" "$CONF_FILE"
     echo "  [SET] $key = \"$value\""
 }
+
+# Function to add a line to csf.conf if it doesn't exist
+add_config_if_missing() {
+    local key=$1
+    local line=$2
+    if ! grep -q "^\s*$key\s*=" "$CONF_FILE"; then
+        echo "  [ADD] Adding placeholder for $key"
+        echo "" >> "$CONF_FILE"
+        echo "# Auto-added by Revolutionary Technology Auto-Tuner" >> "$CONF_FILE"
+        echo "$line" >> "$CONF_FILE"
+    fi
+}
+
 
 # Function to check a value against sanity.txt
 # $1 = Key (e.g., PT_USERPROC)
@@ -60,7 +74,7 @@ check_sanity() {
             fi
         done
         
-        # Handle complex options like CT_LIMIT=0|10-000=0
+        # Handle complex options like CT_LIMIT=0|10-1000=0
         if [[ "$ranges" == *-* ]]; then
             # This is a range with a '|' prefix, fall through to range check
             :
@@ -72,17 +86,17 @@ check_sanity() {
     fi
     
     if [[ "$ranges" == *-* ]]; then
-        # Number range (e.g., PT_USERPROC=0-14000=55 or CT_LIMIT=0|10-000=0)
+        # Number range (e.g., PT_USERPROC=0-14000=55 or CT_LIMIT=0|10-1000=0)
         local range_part=$(echo "$ranges" | cut -d'=' -f1)
         
-        # Handle special case like CT_LIMIT=0|10-000=0
+        # Handle special case like CT_LIMIT=0|10-1000=0
         if [[ "$range_part" == *\|* ]]; then
             local special_val=$(echo "$range_part" | cut -d'|' -f1)
             if [ "$value" == "$special_val" ]; then
                 return 0 # 0 is a valid value
             fi
             # Adjust range_part to be the simple range
-            range_part=$(echo "$range_part" | cut -d'|' -f2) # now range_part is 10-000
+            range_part=$(echo "$range_part" | cut -d'|' -f2) # now range_part is 10-1000
         fi
 
         local min=$(echo "$range_part" | cut -d'-' -f1)
@@ -104,6 +118,69 @@ check_sanity() {
     return 0
 }
 
+# --- [NEW] Prerequisite Module Loader ---
+# This activates the drivers *before* we try to use them.
+load_required_modules() {
+    echo ""
+    echo "Activating kernel modules (drivers)..."
+    
+    # --- 1. Load Netfilter/xtables modules ---
+    # We load these to ensure our advanced rules (TARPIT) and ipset work.
+    local modules_to_load=(
+        # Core xtables-addons targets for scanner defense
+        "xt_TARPIT"         # For TARPIT drop
+        "xt_ECHO"           # For advanced rules
+        "xt_CHAOS"          # For CHAOS target
+        "xt_DELUDE"         # For CHAOS/DELUDE target
+        
+        # Core xtables-addons matches and utilities
+        "xt_geoip"          # For GEOIP matching
+        "xt_ipp2p"          # For P2P matching
+        "xt_account"        # For per-IP accounting
+        "xt_pknock"         # For Port Knocking
+        "xt_TEE"            # For packet copying
+        "xt_IPMARK"         # For IP-based marking
+        "xt_SYSRQ"          # For remote SysRq triggers
+        "xt_dhcpmac"        # For DHCP MAC matching
+        "xt_dnetmap"        # For 1:1 NAT
+        "xt_LOGMARK"        # For logging packet marks
+
+        # Core Firewall necessities
+        "ip_set"            # Base for ipset
+        "ip_set_hash_ip"    # Common ipset type
+        "ip_set_hash_net"   # Common ipset type
+        "nf_conntrack"      # Core connection tracking
+    )
+    
+    for module in "${modules_to_load[@]}"; do
+        if lsmod | grep -q "^${module}"; then
+            echo "  [OK] Module $module is already loaded."
+        else
+            echo -n "  [INFO] Loading module $module..."
+            if modprobe "$module" 2>/dev/null; then
+                echo " OK."
+            else
+                echo " FAILED. (This is non-fatal, but may limit features)."
+            fi
+        fi
+    done
+
+    # --- 2. Check Virtualization Drivers ---
+    # On VMs, performance dies without guest tools (the "driver").
+    if command -v lspci &> /dev/null; then
+        if lspci | grep -qi "VMware"; then
+            echo "  [INFO] VMware environment detected."
+            if ! lsmod | grep -q "^vmxnet3"; then
+                echo "  [WARN] VMware vmxnet3 driver not found. Hardware acceleration (10x speed) may be disabled."
+                echo "  [WARN] Ensure 'open-vm-tools' is installed and the NIC is 'VMXNET 3'."
+            else
+                echo "  [OK] VMware vmxnet3 high-speed driver is active."
+            fi
+        fi
+    fi
+}
+
+
 # --- [UPGRADED] Full NIC Hardware Acceleration Function ---
 # Enables RPS (CPU load balancing) and true hardware offloads (GSO, TSO, etc.)
 enable_nic_acceleration() {
@@ -122,8 +199,8 @@ enable_nic_acceleration() {
     
     # Check for ethtool
     if ! command -v ethtool &> /dev/null; then
-        echo "  [WARN] `ethtool` not found. Skipping true hardware offloads (TSO, GSO, etc)."
-        echo "  [INFO] To get full 10x performance, please install `ethtool` (e.g., `yum install ethtool`)"
+        echo "  [WARN] \`ethtool\` not found. Skipping true hardware offloads (TSO, GSO, etc)."
+        echo "  [INFO] To get full 10x performance, please install \`ethtool\` (e.g., \`yum install ethtool\`)"
         return
     fi
     
@@ -254,6 +331,9 @@ fi
 
 echo "Selected Profile: $PROFILE"
 echo ""
+
+# [NEW] Load prerequisite drivers/modules FIRST
+load_required_modules
 
 # 4. Define Tuned Settings
 declare -A TUNE_SETTINGS
@@ -387,6 +467,9 @@ echo "Backing up $CONF_FILE to $BACKUP_FILE..."
 cp "$CONF_FILE" "$BACKUP_FILE"
 
 echo ""
+# [NEW] Add placeholder for RT_LICENSE_KEY
+add_config_if_missing "RT_LICENSE_KEY" "RT_LICENSE_KEY = \"\""
+
 echo "Applying and validating csf.conf settings..."
 for key in "${!TUNE_SETTINGS[@]}"; do
     value="${TUNE_SETTINGS[$key]}"
