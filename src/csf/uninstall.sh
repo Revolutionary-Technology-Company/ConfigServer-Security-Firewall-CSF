@@ -1,48 +1,61 @@
 #!/bin/sh
-echo "Uninstalling csf and lfd..."
+echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
-# Stop and flush the firewall
-/usr/sbin/csf -f
+echo "Stopping dynamic services (LFD, NIC Accelerator, ModSec Bridge)..."
+if test `cat /proc/1/comm` = "systemd"; then
+    # Stop all our services first to freeze the state
+    systemctl stop lfd.service >/dev/null 2>&1
+    systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
+    systemctl stop modsec3-converter.service >/dev/null 2>&1
+else
+    # Fallback for non-systemd
+    /etc/init.d/lfd stop >/dev/null 2>&1
+fi
 
-# [Revolutionary Tech Uninstall]
-# Remove custom iptables rules and sysctl settings
-echo "Removing custom firewall rules and sysctl settings..."
+echo "Removing Hardware-Accelerated rules (Stress Engine)..."
+IPTABLES=$(which iptables || echo "/sbin/iptables")
+# Flush and remove our custom chains
+$IPTABLES -t raw -F RT_STRESS_ENGINE_RAW > /dev/null 2>&1
+$IPTABLES -t raw -D PREROUTING -j RT_STRESS_ENGINE_RAW > /dev/null 2>&1
+$IPTABLES -t raw -X RT_STRESS_ENGINE_RAW > /dev/null 2>&1
+$IPTABLES -t filter -F RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
+$IPTABLES -D INPUT -j RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
+$IPTABLES -t filter -X RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
+
+echo "Removing custom SYN flood rules..."
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP >/dev/null 2>&1
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/null 2>&1
+
+echo "Restoring kernel defaults..."
+# Remove our tuning files
+rm -fv /etc/sysctl.d/99-csf-tuning.conf
+# Reload sysctl to restore defaults (or OS-provided values)
+sysctl --system >/dev/null 2>&1
 
 # Remove persistent syncookies setting and reload
 if grep -q "^net.ipv4.tcp_syncookies[[:space:]]*=[[:space:]]*1" /etc/sysctl.conf; then
     sed -i '/^net.ipv4.tcp_syncookies[[:space:]]*=[[:space:]]*1/d' /etc/sysctl.conf
-    echo "Reloading sysctl configuration..."
     sysctl -p >/dev/null 2>&1
 fi
-# [End Revolutionary Tech Uninstall]
+
+echo "Flushing main CSF firewall rules..."
+# Now that all custom logic is gone, we can safely flush the main rules.
+/usr/sbin/csf -f
+
+# --- Continue with standard file removal ---
 
 if test `cat /proc/1/comm` = "systemd"; then
-    # Stop and disable csf/lfd
-    systemctl disable csf.service
-    systemctl disable lfd.service
-    systemctl stop csf.service
-    systemctl stop lfd.service
-
-    # [NEW] Stop and disable ModSec3 Bridge
-    echo "Stopping ModSec3 Converter service..."
+    # Services are already stopped, now disable and remove files
+    echo "Disabling and removing systemd services..."
+    systemctl disable csf.service >/dev/null 2>&1
+    systemctl disable lfd.service >/dev/null 2>&1
     systemctl disable modsec3-converter.service >/dev/null 2>&1
-    systemctl stop modsec3-converter.service
-
-    # [UPDATED] Stop and disable NIC Accelerator service
-    echo "Stopping NIC Accelerator service..."
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
-    systemctl stop csf-nic-accelerator.service
 
     rm -fv /usr/lib/systemd/system/csf.service
     rm -fv /usr/lib/systemd/system/lfd.service
-    
-    # [NEW] Remove ModSec3 Bridge service file
     rm -fv /etc/systemd/system/modsec3-converter.service
-    
-    # [UPDATED] Remove NIC Accelerator service file
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
     
     systemctl daemon-reload
@@ -112,10 +125,13 @@ if [ -f /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver ]; then
     /bin/touch /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver
 fi
 
-# [NEW] Remove Auto-Tuner files
-echo "Removing Auto-Tuner files..."
+# [UPDATED] Remove Auto-Tuner & Hardware Acceleration files
+echo "Removing Auto-Tuner and Acceleration tools..."
 rm -fv /usr/local/sbin/csf-autotune.sh
-rm -fv /etc/sysctl.d/99-csf-tuning.conf
+rm -fv /usr/local/sbin/csf-firmware-check.sh
+rm -fv /usr/local/sbin/stressengine.sh
+rm -fv /usr/local/sbin/rt-sign-module.sh
+rm -fv /usr/local/sbin/rt-csf-update.sh
 
 # [NEW] Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
@@ -134,4 +150,5 @@ rm -Rfv /usr/local/include/csf
 # [End Revolutionary Tech Uninstall]
 
 echo
+echo "Revolutionary Technology Firewall Engine has been uninstalled."
 echo "...Good luck!"
