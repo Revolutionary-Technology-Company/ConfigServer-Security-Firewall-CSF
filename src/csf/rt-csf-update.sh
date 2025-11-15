@@ -76,7 +76,7 @@ cd $INSTALLER_SRC
 echo "Running Revolutionary Technology installer..."
 sh install.sh
 
-# 7. Clean up
+# 7. Cleaning up
 echo "Cleaning up..."
 rm -rf $INSTALL_DIR
 rm -f /usr/src/csf-latest.tgz

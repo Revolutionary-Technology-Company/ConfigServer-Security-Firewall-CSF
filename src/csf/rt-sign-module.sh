@@ -99,7 +99,7 @@ echo -e "    ${yellowl}--- ACTION REQUIRED ---${end}"
 echo -e "    A new password is required for the MOK enrollment."
 echo -e "    You will be asked for this password ${yellowl}one time${end} during the reboot."
 echo -e "    Please enter a new password now (it will not be echoed):"
-# mokutil --import will prompt the user for a password here.
+# mokutil --the import will prompt the user for a password here.
 
 echo -e "    ${greenl}> Key enrollment has been staged!${end}"
 echo "1" > /tmp/rt_reboot_required

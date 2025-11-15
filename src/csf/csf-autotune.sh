@@ -484,6 +484,6 @@ done
 
 echo ""
 echo "--------------------------------"
-echo "Auto-Tuning Complete."
+echo "Revolutionary Technology Auto-Tuning Complete."
 echo "Review changes and restart csf with: csf -ra"
 echo "--------------------------------"

@@ -88,7 +88,7 @@ if [ -f "$DENY_TEMP" ]; then
     done
 fi
 
-# --- 6. Finalize chains ---
+# --- 6. Finalize the chains ---
 # Any packet that was set to NOTRACK but didn't match an IP
 # must be dropped to prevent it from bypassing conntrack.
 $IPTABLES -A RT_STRESS_ENGINE_FILTER -m conntrack --ctstate UNTRACKED -j DROP
