@@ -12,36 +12,49 @@ ChangeLog:
 		* **Version 2.15.xx:** Our premium, modern product line. This is the only
 		version that receives hardware offloading & acceleration, new kernel-level
 		security features, iptables enhancements, and our latest GUI.
+		
+		Added new secure "Revolutionary Technology CSF Updater" (rt-csf-update.sh):
+		* Replaces the old update system.
+		* Validates the 'RT_LICENSE_KEY' from csf.conf against
+        configserver.shop to authenticate and download updates.
+		* Auto-Tuner now adds the 'RT_LICENSE_KEY' placeholder to csf.conf.
+
+		Added new "Licensing Policy" (licensing_policy.md):
+		* Clarifies the $349 per-server commercial license, the GPLv3
+        core, and the value of the new hardware acceleration features.
+		Refactored the entire update system for secure, license-based
+		authentication on configserver.shop.
+		Removed all hard-coded public download servers from the
+		update-check script (csget.pl).
+		Integrated new secure API endpoints (downloader.php and
+		version_check.php) to validate purchases.
+		All product updates and version checks for v2.15.xx now require
+		a valid serial KEY "SPONSOR_LICENSE" key for authentication.
 
 		Revolutionary Technology's Hardware offloading engine activates
 		NIC microprocessors to handle all packet filtering. This frees server CPU
 		and memory to focus entirely on applications.
-
-		This hardware-level integration provides visual feedback on NIC LEDs:
-		* **White NIC Light:** WAN, secure networks, critical links.
-		* **Green NIC Light:** Hardware acceleration is inactive (or virtual
-		environment requires additional configuration), netfilter
-		and iptables are using GPU, memory, and local storage.
-		* **Blue NIC Light:** Hardware acceleration is active and processing
-		traffic. NIC uses internal microprocessors, flash storage, etc.
-		* **Red NIC Light:** A packet has been blocked (failed connection) at
-		the hardware level, with zero impact on the main CPU.
-		* **Yellow NIC Light:** 100 Mbps connection.
-		* **Orange NIC Light:** Proprietary systems.
-		* **Grey NIC Light:** Sending data.
-		* **Flashing Grey & White NIC Light:** Encrypted Connection.
-		* **Flashing Blue & Green NIC Light:** Bridge Connection.
-		* **Flashing Green & Amber NIC Light:** Sending data at 100 Mbps.
-
+		
 		Added new "Responsive Resource Allocation" engine to the installer.
 		The installer now auto-tunes performance settings based on server
-		RAM and CPU cores. This includes kernel conntrack tables (12%
-		of system RAM), CT_LIMIT, PT_USERMEM, and IPSET limits for
-		[cite_start]high-performance servers.
+		RAM and CPU cores. This includes  a full "Hardware Acceleration ]
+		Activator" (csf-autotune.sh):
+		* Now activates the *entire* 'xtables-addons' driver pack on install
+        (modprobe xt_TARPIT, xt_CHAOS, xt_DELUDE, xt_geoip, etc.).
+		* Loads the critical 'nf_conntrack' module to support the Stress Engine.
+		* Activates full NIC Hardware Offloading (Routing & TCP) using 'ethtool'.
+        This enables TSO, GSO, GRO, and Checksumming on the 12% NIC slice.
+		* Activates Receive Packet Steering (RPS) to balance the network
+        load across all CPU cores, eliminating bottlenecks.
+		* Creates a persistent systemd service (csf-nic-accelerator.service)
+        to ensure all hardware offloads are re-applied on boot.
+		* Sets new high-performance defaults: RESTRICT_SYSLOG=3, PT_LIMIT=0
+        (disabling old slow process tracking), CC_LOOKUPS=4, LF_DISTFTP=5.
 
 		Integrated new "Attacker Stress Engine".
-		Installer now automatically installs all 'xtables-addons' dependencies
-		(including 'xt_TARPIT') on apt and yum-based systems.
+		* Now a "Dynamic Target Firmware" that reads the DROP setting from
+        csf.conf and applies the correct stateless 'xtables-addons'
+        target (TARPIT, CHAOS, or DELUDE) for 10x speed.
 		Installer now detects Secure Boot and will automatically:
 		1. Install all required signing packages (mokutil, kernel-devel, etc.).
 		2. Generate a persistent signing key (rt_mok.priv) for the module.
@@ -62,15 +75,27 @@ ChangeLog:
 		[cite_start]MODSEC_LOG path is now set automatically during installation.
 
 		Permanently ignore logging for all cPanel PHP-FPM pools
+		
+		Added new "Google Safe Sites" Integration (Zero Trust Defense):
+		* Added new *defensive* poller (rt-gsb-poller.sh).
+		* Runs as a 24/7 service, pulling Google's malicious IP lists.
+		* Injects threats directly into a high-speed 'ipset'
+        (rt_google_safesites) for instant, "ahead-of-the-threat"
+        hardware-level blocking with zero performance impact.
 
-		Refactored the entire update system for secure, license-based
-		authentication on configserver.shop.
-		Removed all hard-coded public download servers from the
-		update-check script (csget.pl).
-		Integrated new secure API endpoints (downloader.php and
-		version_check.php) to validate purchases.
-		All product updates and version checks for v2.15.xx now require
-		a valid serial KEY "SPONSOR_LICENSE" key for authentication.
+		Added new "Community Defense Reporter" (rt-block-reporter.sh):
+		* New hourly cron job to "call the police" on attackers.
+		* Finds all blocked IPs, performs a reverse-DNS to find the domain,
+        and submits the malicious domain to the Google Web Risk API as
+        'MALWARE' and 'SOCIAL_ENGINEERING' to protect the community and
+        get criminal infrastructure blacklisted.
+
+		Updated Uninstaller (uninstall.sh):
+		* Re-written for "Protection-First" logic to never leave the
+        server undefended.
+		* Now correctly stops, disables, and removes *all* new services,
+        cron jobs, scripts, 'ipset' rules, and kernel tuners for a
+        100% clean removal.
 
 15.07 - Add new tab "Resources" to tab interface.
 

@@ -2,20 +2,31 @@
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
-echo "Stopping dynamic services (LFD, NIC Accelerator, ModSec Bridge)..."
-if test `cat /proc/1/comm` = "systemd"; then
+echo "Stopping dynamic services (LFD, NIC Accelerator, GSB Poller)..."
+if test \`cat /proc/1/comm\` = "systemd"; then
     # Stop all our services first to freeze the state
     systemctl stop lfd.service >/dev/null 2>&1
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service >/dev/null 2>&1
+    systemctl stop rt-gsb-poller.service >/dev/null 2>&1
 else
     # Fallback for non-systemd
     /etc/init.d/lfd stop >/dev/null 2>&1
 fi
 
-echo "Removing Hardware-Accelerated rules (Stress Engine)..."
+echo "Removing Hardware-Accelerated rules (Stress Engine & GSB)..."
 IPTABLES=$(which iptables || echo "/sbin/iptables")
-# Flush and remove our custom chains
+IPSET=$(which ipset || echo "/usr/sbin/ipset")
+
+# Flush and remove Google Safe Sites ipset
+if $IPSET list -n "rt_google_safesites" &>/dev/null; then
+    echo "Removing Google Safe Sites firewall rules..."
+    $IPTABLES -D INPUT -m set --match-set rt_google_safesites src -j DROP >/dev/null 2>&1
+    $IPSET flush rt_google_safesites
+    $IPSET destroy rt_google_safesites
+fi
+
+# Flush and remove Stress Engine chains
 $IPTABLES -t raw -F RT_STRESS_ENGINE_RAW > /dev/null 2>&1
 $IPTABLES -t raw -D PREROUTING -j RT_STRESS_ENGINE_RAW > /dev/null 2>&1
 $IPTABLES -t raw -X RT_STRESS_ENGINE_RAW > /dev/null 2>&1
@@ -45,18 +56,20 @@ echo "Flushing main CSF firewall rules..."
 
 # --- Continue with standard file removal ---
 
-if test `cat /proc/1/comm` = "systemd"; then
+if test \`cat /proc/1/comm\` = "systemd"; then
     # Services are already stopped, now disable and remove files
     echo "Disabling and removing systemd services..."
     systemctl disable csf.service >/dev/null 2>&1
     systemctl disable lfd.service >/dev/null 2>&1
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
+    systemctl disable rt-gsb-poller.service >/dev/null 2>&1
 
     rm -fv /usr/lib/systemd/system/csf.service
     rm -fv /usr/lib/systemd/system/lfd.service
     rm -fv /etc/systemd/system/modsec3-converter.service
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
+    rm -fv /etc/systemd/system/rt-gsb-poller.service
     
     systemctl daemon-reload
 else
@@ -98,7 +111,7 @@ fi
 
 # Remove chkservd integration
 rm -fv /etc/chkserv.d/lfd
-rm -fv /var/run/chkservd/lfd
+rm -fv /var/run/chkserv.d/lfd
 if [ -f /etc/chkserv.d/chkservd.conf ]; then
     sed -i 's/lfd:1//' /etc/chkserv.d/chkservd.conf
     /scripts/restartsrv_chkservd > /dev/null 2>&1
@@ -132,6 +145,10 @@ rm -fv /usr/local/sbin/csf-firmware-check.sh
 rm -fv /usr/local/sbin/stressengine.sh
 rm -fv /usr/local/sbin/rt-sign-module.sh
 rm -fv /usr/local/sbin/rt-csf-update.sh
+rm -fv /usr/local/sbin/rt-gsb-poller.sh
+rm -fv /usr/local/sbin/rt-block-reporter.sh
+rm -fv /etc/cron.hourly/rt-block-reporter
+rm -fv /var/lib/csf/rt-reporter.state
 
 # [NEW] Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
