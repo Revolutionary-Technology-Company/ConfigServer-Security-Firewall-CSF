@@ -4,21 +4,21 @@ An enterprise hardware-software-hybrid ModSecurity 3 security, firewall, and log
 by Dr. Correo "Cyph3r" Hofstad. 
 
 ![https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png](https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png)
-"Don't where I have been, just buy our software so I can afford to take you out for food and drinks sometime"
+"Don't worry where I have been, just buy our software so I can afford to take you out for food and drinks sometime"
 **-Cyph3r**
 
 **
 
-## Echos of IRC Channels fro the 1990s
+## Echos of IRC Channels from the 1990s
 
-The last post made by Cyph3r in a public internet forum, was the announcement of a naval deployment ovr 20 years ago. Cyph3r dissapeared with his closet full of ConfigServers from Los Alamos National Laboratory, his grandmother's firwalls grew to become Watchguard, and a young Correo, known to many as "Cory" came back from a Naval deployment to quietly start Revolutionary Technology in Seattle, WA, USA, under his government name Cory Hofstad.
+The last post made by Cyph3r in a public internet forum was the announcement of a naval deployment over 20 years ago. Cyph3r disappeared with his closet full of ConfigServers from Los Alamos National Laboratory, his grandmother's firewalls grew to become Watchguard, and a young Correo, known to many as "Cory," came back from a Naval deployment to quietly start Revolutionary Technology in Seattle, WA, USA, under his government name Cory Hofstad.
 
 ## ConfigServer under Way to the Web Limited.
-ConfigServer's leadership and operations was led by the man who developed the Login Failure Daemon (LFD) engine used by Los Alamos National Laboratories. A tech company in the UK would run American Linux firewalls for two decades, offering ConfigServer Security & Firewall (CSF) as a free product, with paid support and installation. CSF has issues with the fact that it is ONLY a GUI for iptables with LFD included. For example, without installing, x-tables addons for netfilter and iptables, DROP targets advertised in CSF like TARPIT do not function.
+ConfigServer's leadership and operations were led by the man who developed the Login Failure Daemon (LFD) engine used by Los Alamos National Laboratories. A tech company in the UK would run American Linux firewalls for two decades, offering ConfigServer Security & Firewall (CSF) as a free product, along with paid support and installation services. CSF has issues with the fact that it is ONLY a GUI for iptables with LFD included. For example, without installing x-tables addons for netfilter and iptables, DROP targets advertised in CSF, like TARPIT, do not function.
 
 ## Cyph3r Comes Back from Los Alamos National Laboratory with Firewall Updates for CSF
 
-CSF 2.15.07 is a preview of features available in comercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publically available. US Government laboratories cannot sell software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Cyph3r provides official updates for CSF for $349 per quarter, or $809 per year. 
+CSF 2.15.07 is a preview of features available in commercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publicly available. U.S. government laboratories are prohibited from selling software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Cyph3r provides official updates for CSF for $349 per quarter or $ 1,209 per year. 
 
 ## Option 1:
 Buy an installer (With Hash Check) and license KEY from https://configserver.shop
@@ -27,19 +27,19 @@ Buy an installer (With Hash Check) and license KEY from https://configserver.sho
 
 **Step 1:**
 
-Please read licensing before installing Revolutionary Technology software suites.
+Please read the licensing before installing Revolutionary Technology software suites.
 
 CSF 2.15.07 is licensed as a commercial application.
 
 For educational institutions, CSF 2.15.07 is classified as an "ENTERPRISE SALE".
 
-CSF 2.15.07 installation files on GitHub are for integrity verification, prior to purchase.
+The CSF 2.15.07 installation files on GitHub are for integrity verification purposes, prior to purchase.
 
 By installing CSF 2.15.07, you have agreed to purchase a license.
 
-Pay me on PayPal after installing CSF 2.15.07.
+Please pay Revolutionary Technology via PayPal.me for the installation of CSF 2.15.07.
 
-I need a tip of at least $30 to manually process PayPal.me orders.
+Revolutionary Technology charges $35 to manually process PayPal.me orders.
 
 https://www.paypal.biz/hweb12312
 
