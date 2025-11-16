@@ -47,10 +47,10 @@ https://www.paypal.biz/hweb12312
 **Step 2:** 
 
 Please download our initial release CSF 2.15.07. 
- - See how your old firewall wastes CPU, RAM, etc to manage internet
-   traffick that your NIC's microprocessors could run. 
+ - See how your old firewall wastes CPU, RAM, etc to manage the internet
+   traffic that your NIC's microprocessors could run. 
   - Let ModSecurity 3 and Google Safe Sites Block and report malicious connections.
  - Enjoy optimized connections to local, state, and federal government network resources, communication channels, and computers.
  - Block SYN flood attacks (ACK & ARP flood attack protections come with an update KEY).
- - Learn about CSF's encypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
+ - Learn about CSF's encrypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
 
