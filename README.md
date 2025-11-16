@@ -1,4 +1,5 @@
 
+
 # ConfigServer-Security-Firewall-CSF
 An enterprise hardware-software-hybrid ModSecurity 3 security, firewall, and log response suite,
 by Dr. Correo "Cyph3r" Hofstad. 
@@ -20,9 +21,12 @@ ConfigServer's leadership and operations were led by the man who developed the L
 
 CSF 2.15.07 is a preview of features available in commercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publicly available. U.S. government laboratories are prohibited from selling software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Cyph3r provides official updates for CSF for $349 per quarter or $ 1,209 per year. 
 
+![enter image description here](https://configserver.shop/images/CSF.png)
+
 ## Option 1:
 Buy an installer (With Hash Check) and license KEY from https://configserver.shop
 
+![enter image description here](https://configserver.shop/images/2025_08_05_06_46_01_884_538978.webp)
 ## Option 2:
 
 **Step 1:**
@@ -47,7 +51,7 @@ Revolutionary Technology charges $35 to manually process PayPal.me orders.
 
 https://www.paypal.biz/hweb12312
 
-
+![enter image description here](https://configserver.shop/images/ConfigServer-price-cost.webp)
 **Step 2:** 
 
 Please download our initial release CSF 2.15.07. 
@@ -58,3 +62,12 @@ Please download our initial release CSF 2.15.07.
  - Block SYN flood attacks (ACK & ARP flood attack protections come with an update KEY).
  - Learn about CSF's encrypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
 
+## Happy Customers,
+
+![enter image description here](https://configserver.shop/images/ConfigServer-Microsoft-firewall.webp)
+Bill Gates with a new CSF developer.
+
+![enter image description here](https://configserver.shop/images/ConfigServer-Linux-firewall.webp)
+Linux Torvalds with Security and rescue dogs at Mt. Rainier. 
+
+Pro Tip from Cyph3r: Service dogs can detect the increased temperatures, buzzing, noises, and frequencies associated with incoming DDoS attacks.
