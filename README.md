@@ -5,7 +5,7 @@ An enterprise hardware-software-hybrid ModSecurity 3 security, firewall, and log
 by Dr. Correo "Cyph3r" Hofstad. 
 
 ![https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png](https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png)
-"Don't worry where I have been, just buy our software so I can afford to take you out for food and drinks sometime"
+"Don't worry where I have been, just buy our software so I can afford to take you out for food and drinks sometime."
 **-Cyph3r**
 
 **
