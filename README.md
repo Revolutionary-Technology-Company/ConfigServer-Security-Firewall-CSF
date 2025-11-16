@@ -25,6 +25,7 @@ Buy an installer (With Hash Check) and license KEY from https://configserver.sho
 
 ## Option 2:
 **Step 1:**
+
 Please download our initial release CSF 2.15.07. 
  - See how your old firewall wastes CPU, RAM, etc to manage internet
    traffick that your NIC's microprocessors could run. 
@@ -35,12 +36,6 @@ Please download our initial release CSF 2.15.07.
 
 **Step 2:** 
 
-CSF is not for free. CSF is an ENTERPRISE SALE.
-
-You should read the license, and you can look at the code to verify our integrity.
-
-Once you have installed CSF 2.15.07, you have agreed to pay Revolutionary Technology.
-
+Pay me on PayPal after trialing CSF 2.15.07.
 I need a tip of at least $30 to manually process PayPal.me orders.
-
 https://www.paypal.biz/hweb12312
