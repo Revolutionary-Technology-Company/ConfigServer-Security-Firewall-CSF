@@ -36,6 +36,19 @@ Please download our initial release CSF 2.15.07.
 
 **Step 2:** 
 
-Pay me on PayPal after trialing CSF 2.15.07.
+
+Please read licensing before installing Revolutionary Technology software suites.
+
+CSF 2.15.07 is licensed as a commercial application.
+
+For educational institutions, CSF 2.15.07 is classified as an "ENTERPRISE SALE".
+
+CSF 2.15.07 installation files on GitHub are for integrity verification, prior to purchase.
+
+By installing CSF 2.15.07, you have agreed to purchase a license.
+
+Pay me on PayPal after installing CSF 2.15.07.
+
 I need a tip of at least $30 to manually process PayPal.me orders.
+
 https://www.paypal.biz/hweb12312
