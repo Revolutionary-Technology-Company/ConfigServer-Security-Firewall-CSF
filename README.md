@@ -34,5 +34,7 @@ Please download our initial release CSF 2.15.07.
  - Learn about CSF's encypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
 
 **Step 2:** 
-Pay me on PayPal after trialing CSF 2.15.07. I need a tip of at least $30 to manually process PayPal.me orders.
+
+Pay me on PayPal after trialing CSF 2.15.07.
+I need a tip of at least $30 to manually process PayPal.me orders.
 https://www.paypal.biz/hweb12312
