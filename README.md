@@ -19,7 +19,7 @@ ConfigServer's leadership and operations were led by the man who developed the L
 
 ## Cyph3r Comes Back from Los Alamos National Laboratory with Firewall Updates for CSF
 
-CSF 2.15.07 is a preview of features available in commercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publicly available. U.S. government laboratories are prohibited from selling software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Cyph3r provides official updates for CSF for $349 per quarter or $ 1,209 per year. 
+CSF 2.15.07 is a preview of features available in commercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publicly available. U.S. government laboratories are prohibited from selling software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Spider Labs (Los Alamos employees' private company) provides rules for ModSecurity. Revolutionary Technology provides official updates for CSF for $349 per quarter or $ 1,209 per year. 
 
 ![enter image description here](https://configserver.shop/images/CSF.png)
 
