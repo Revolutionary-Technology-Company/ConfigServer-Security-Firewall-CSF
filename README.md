@@ -37,7 +37,7 @@ The CSF 2.15.07 installation files on GitHub are for integrity verification purp
 
 CSF Releases after 2.15.07 will NOT be available on GitHub and will require use of an authenticated Linux repository.
 
-The CSF 2.15.xx repository requires a key.
+The CSF 2.15.xx repository requires a license.
 
 By installing CSF 2.15.07, you have agreed to purchase a license.
 
