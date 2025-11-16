@@ -57,10 +57,12 @@ https://www.paypal.biz/hweb12312
 Please download our initial release CSF 2.15.07. 
  - See how your old firewall wastes CPU, RAM, etc to manage the internet
    traffic that your NIC's microprocessors could run. 
-  - Let ModSecurity 3 and Google Safe Sites Block and report malicious connections.
+ - Let ModSecurity 3 and Google Safe Sites block and report malicious connections.
  - Enjoy optimized connections to local, state, and federal government network resources, communication channels, and computers.
  - Block SYN flood attacks (ACK & ARP flood attack protections come with an update KEY).
  - Learn about CSF's encrypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
+ - Activate ECHO as Drop Target to enable CSF's Search Engine Friendly ECHO Proxy Cache.
+   ECHO works like a "flip-flop" circuit, creating a buffer of cache using ISP bandwidth.
 
 ## Happy Customers,
 
