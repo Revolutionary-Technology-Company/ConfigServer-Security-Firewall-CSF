@@ -35,7 +35,11 @@ Please download our initial release CSF 2.15.07.
 
 **Step 2:** 
 
-Pay me on PayPal after trialing CSF 2.15.07.
+CSF is not for free. CSF is an ENTERPRISE SALE.
+
+You should read the license, and you can look at the code to verify our integrity.
+
+Once you have installed CSF 2.15.07, you have agreed to pay Revolutionary Technology.
 
 I need a tip of at least $30 to manually process PayPal.me orders.
 
