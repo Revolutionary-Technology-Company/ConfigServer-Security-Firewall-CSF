@@ -4,10 +4,12 @@
 #   @website            https://configserver.shop
 #   @docs               https://docs.configserver.shop
 #   @download           https://download.configserver.shop
+#   
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
 #                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+#         
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
@@ -43,6 +45,7 @@
 #   
 #   [*] Remember to escape special characters when using regex, e.g.:
 #       pexe:/home/.*/public_html/cgi-bin/script\.cgi
+# 
 #       puser:bob\d.*
 #       pcmd:/home/.*/command\s\to\smatch\s\.pl\s.*
 #   
@@ -130,3 +133,9 @@ exe:/usr/sbin/mariadbd
 #   cmd:spamd child
 #   cmd:/bin/sh /usr/bin/mysqld_safe --basedir=/usr
 exe:/opt/cpanel/ea-php*/root/usr/sbin/php-fpm
+
+# Revolutionary Technology Services
+exe:/usr/local/sbin/modsec3_converter.pl
+exe:/usr/local/sbin/rt-gsb-poller.sh
+exe:/usr/local/sbin/rt-google-ip-updater.pl
+pcmd:/bin/sh /usr/local/sbin/csf-nic-accelerator.sh

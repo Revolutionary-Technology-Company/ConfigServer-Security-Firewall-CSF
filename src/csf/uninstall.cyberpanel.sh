@@ -1,3 +1,10 @@
+Got it. This is a clean integration, keeping the CyberPanel modifications separate from the core firewall logic.
+
+I've merged all the "Revolutionary Technology" removal steps into the `uninstall.cyberpanel.sh` script. This new version now removes all your custom components (Tarpit, Google services, etc.) and properly handles the CyberPanel-specific plugin and UI files.
+
+Here is the complete, updated `uninstall.cyberpanel.sh`:
+
+```bash
 #!/bin/sh
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
@@ -172,3 +179,4 @@ rm -Rfv /usr/local/include/csf
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."
 echo "...Done"
+```
