@@ -1,9 +1,3 @@
-Yes, here is the fully updated `uninstall.sh` script.
-
-I've added the new commands to remove the Google IP updater script (`rt-google-ip-updater.pl`), its cron job, and the IP/ASN entries it adds to your `/etc/csf/csf.allow` file. This ensures the uninstaller leaves the system completely clean.
-
-Here is the complete script:
-
 ```bash
 #!/bin/sh
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
