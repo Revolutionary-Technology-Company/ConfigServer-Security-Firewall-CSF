@@ -153,6 +153,7 @@ rm -fv /var/lib/csf/rt-reporter.state
 # [NEW] Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
+rm -fv /var/log/modsec_compat.log # <-- ADDED: Remove the custom log file
 
 # Remove all csf data and config directories
 echo "Removing data and configuration directories..."
