@@ -1,4 +1,3 @@
-```bash
 #!/bin/sh
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
@@ -182,4 +181,3 @@ rm -Rfv /usr/local/include/csf
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."
 echo "...Good luck!"
-```
