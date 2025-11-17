@@ -1,3 +1,10 @@
+Yes, here is the fully updated `uninstall.sh` script.
+
+I've added the new commands to remove the Google IP updater script (`rt-google-ip-updater.pl`), its cron job, and the IP/ASN entries it adds to your `/etc/csf/csf.allow` file. This ensures the uninstaller leaves the system completely clean.
+
+Here is the complete script:
+
+```bash
 #!/bin/sh
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
@@ -124,6 +131,7 @@ rm -fv /usr/sbin/lfd
 rm -fv /etc/cron.d/csf_update
 rm -fv /etc/cron.d/lfd-cron
 rm -fv /etc/cron.d/csf-cron
+rm -fv /etc/cron.d/rt-google-ip-updater # <-- ADDED
 rm -fv /etc/logrotate.d/lfd
 rm -fv /usr/local/man/man1/csf.man.1
 
@@ -147,13 +155,23 @@ rm -fv /usr/local/sbin/rt-sign-module.sh
 rm -fv /usr/local/sbin/rt-csf-update.sh
 rm -fv /usr/local/sbin/rt-gsb-poller.sh
 rm -fv /usr/local/sbin/rt-block-reporter.sh
+rm -fv /usr/local/sbin/rt-google-ip-updater.pl # <-- ADDED
 rm -fv /etc/cron.hourly/rt-block-reporter
 rm -fv /var/lib/csf/rt-reporter.state
 
 # [NEW] Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
-rm -fv /var/log/modsec_compat.log # <-- ADDED: Remove the custom log file
+rm -fv /var/log/modsec_compat.log
+
+# [NEW] Clean up Google IP entries from csf.allow
+echo "Cleaning Google IP entries from csf.allow..."
+if [ -f /etc/csf/csf.allow ]; then
+    # This sed command removes the entire block between the markers
+    sed -i '/^# BEGIN Revolutionary Technology Google IPs/,/^# END Revolutionary Technology Google IPs/d' /etc/csf/csf.allow > /dev/null 2>&1
+    # This removes any static ASN entries
+    sed -i '/# Google ASN/d' /etc/csf/csf.allow > /dev/null 2>&1
+fi
 
 # Remove all csf data and config directories
 echo "Removing data and configuration directories..."
@@ -170,3 +188,4 @@ rm -Rfv /usr/local/include/csf
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."
 echo "...Good luck!"
+```

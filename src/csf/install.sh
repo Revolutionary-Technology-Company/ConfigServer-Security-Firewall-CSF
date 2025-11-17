@@ -94,7 +94,12 @@ SIGN_MODULE_DEST="/usr/local/sbin/rt-sign-module.sh"
 
 UPDATE_SCRIPT="rt-csf-update.sh"
 UPDATE_DEST="/usr/local/sbin/rt-csf-update.sh"
-# --- [END NEW] ---
+
+# --- [UPDATED] Google IP Updater ---
+GOOGLE_IP_SCRIPT="rt-google-ip-updater.pl"
+GOOGLE_IP_DEST="/usr/local/sbin/rt-google-ip-updater.pl"
+GOOGLE_IP_CRON="/etc/cron.d/rt-google-ip-updater"
+# --- [END UPDATED] ---
 
 
 # #
@@ -224,8 +229,9 @@ install_modsec3_bridge() {
         return 1
     fi
 
-    print "    > Installing Perl dependencies (JSON::MaybeXS, File::Tail)..."
-    (cpan install JSON::MaybeXS File::Tail > /dev/null 2>&1) &
+    # --- [UPDATED] Added LWP::Simple for Google IP Updater ---
+    print "    > Installing Perl dependencies (JSON::MaybeXS, File::Tail, LWP::Simple)..."
+    (cpan install JSON::MaybeXS File::Tail LWP::Simple > /dev/null 2>&1) &
 
     # --- Create the Perl converter script ---
     print "    > Creating /usr/local/sbin/modsec3_converter.pl..."
@@ -260,7 +266,7 @@ my $MIN_SEVERITY_LEVEL = 2; # Block on CRITICAL (2) or higher
 
 # Allow custom ModSec3 log path
 if ($ARGV[0]) {
-    $MODSEC3_LOG = $ARGV[0];
+    $MODSEC_LOG = $ARGV[0];
 }
 
 # Ensure log files exist
@@ -596,6 +602,30 @@ EOF
             print "    ${redl}[ERROR]${greym} Failed to copy $BLOCK_REPORTER_SCRIPT."
         fi
     fi
+    
+    # --- [NEW] Install Google IP Updater ---
+    if [ ! -f "$GOOGLE_IP_SCRIPT" ]; then
+        print "    ${redl}[ERROR]${greym} $GOOGLE_IP_SCRIPT not found. Skipping Google IP Updater."
+    else
+        cp "$GOOGLE_IP_SCRIPT" "$GOOGLE_IP_DEST"
+         if [ $? -eq 0 ]; then
+            chmod +x "$GOOGLE_IP_DEST"
+            print "    [OK] Google IP Updater (Bot/Voice/Services) installed to $GOOGLE_IP_DEST"
+            
+            echo "    > Creating daily cron job for Google IP Updater..."
+            # This cron runs at a random minute between 3:00 and 5:59 AM server time
+            cat << EOF > "$GOOGLE_IP_CRON"
+# Revolutionary Technology - Google IP Updater
+# Runs daily at a random time between 03:00 and 05:59 server time
+$(shuf -i 0-59) $(shuf -i 3-5) * * * root $GOOGLE_IP_DEST > /dev/null 2>&1
+EOF
+            chmod 644 "$GOOGLE_IP_CRON"
+            print "    [OK] Google IP Updater cron job created."
+        else
+            print "    ${redl}[ERROR]${greym} Failed to copy $GOOGLE_IP_SCRIPT."
+        fi
+    fi
+    
 fi # [FIX] This 'fi' was missing, causing the 'else' error.
 
 print ""

@@ -197,6 +197,20 @@ fi
 if [ ! -e "/etc/csf/csf.allow" ]; then
 	cp -avf csf.interworx.allow /etc/csf/csf.allow
 fi
+
+# --- [UPDATED] Add Google ASNs to csf.allow ---
+print "    Adding Google ASNs to /etc/csf/csf.allow..."
+
+# We use grep -q to avoid adding duplicate entries on re-installation
+grep -q "ASN:15169" /etc/csf/csf.allow || echo "ASN:15169 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:36040" /etc/csf/csf.allow || echo "ASN:36040 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:43515" /etc/csf/csf.allow || echo "ASN:43515 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:36561" /etc/csf/csf.allow || echo "ASN:36561 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:19527" /etc/csf/csf.allow || echo "ASN:19527 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:139070" /etc/csf/csf.allow || echo "ASN:139070 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:396982" /etc/csf/csf.allow || echo "ASN:396982 # Google ASN" >> /etc/csf/csf.allow
+# --- [UPDATED] End Google ASN Block ---
+
 if [ ! -e "/etc/csf/csf.deny" ]; then
 	cp -avf csf.deny /etc/csf/.
 fi
@@ -916,5 +930,5 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
-
+}
 }
