@@ -250,6 +250,27 @@ mkdir -v -m 0600 /usr/local/csf/bin
 mkdir -v -m 0600 /usr/local/csf/lib
 mkdir -v -m 0600 /usr/local/csf/tpl
 
+#
+# --- [Revolutionary Tech] Install BPF/XDP Loader & Rules ---
+#
+print "    Installing BPF/XDP loader script and rules directory..."
+mkdir -v -m 0755 /etc/csf/bpf.d
+if [ -f "csf-bpf-loader.sh" ]; then
+    cp -avf csf-bpf-loader.sh /usr/local/csf/bin/csf-bpf-loader.sh
+    chmod 700 /usr/local/csf/bin/csf-bpf-loader.sh
+    ok "    > BPF loader script installed."
+else
+    warn "    > csf-bpf-loader.sh not found in source. Skipping."
+fi
+if [ -d "bpf.d" ]; then
+    cp -avf bpf.d/* /etc/csf/bpf.d/
+    ok "    > BPF rules directory populated."
+else
+    warn "    > 'bpf.d' directory not found in source. Skipping rules copy."
+fi
+# --- [Revolutionary Tech] End BPF/XDP Block ---
+#
+
 # Revolutionary Technology Control
 print "    Providing immediate DDoS protection from Revlutionary Technology..."
 sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1

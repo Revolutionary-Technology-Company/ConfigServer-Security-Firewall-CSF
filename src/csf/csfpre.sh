@@ -163,6 +163,37 @@ check_sudo()
 status "    Script ${bluel}${app_dir_this}/$app_file_this${greym} loading ${bluel}pre.d${greym} initialzation scripts in folder ${bluel}${path_csfpred}"
 
 # #
+# --- [Revolutionary Tech] BPF/XDP Rule Loader ---
+#
+BPF_DAEMON_BIN="/usr/local/sbin/bpfilterd"
+BPF_LOADER_SCRIPT="/usr/local/csf/bin/csf-bpf-loader.sh"
+
+# 1. Ensure bpfilter daemon is running
+if [ -x "$BPF_DAEMON_BIN" ]; then
+    if ! pgrep -f "$BPF_DAEMON_BIN" > /dev/null; then
+        status "    Starting bpfilter daemon..."
+        "$BPF_DAEMON_BIN" &
+        sleep 1 # Give it a second to start
+        ok "    bpfilter daemon started."
+    else
+        ok "    bpfilter daemon is already running."
+    fi
+else
+    warn "    bpfilter daemon not found at $BPF_DAEMON_BIN. Skipping BPF rules."
+fi
+
+# 2. Run the BPF loader script
+if [ -x "$BPF_LOADER_SCRIPT" ]; then
+    status "    Executing BPF/XDP Rule Loader..."
+    "$BPF_LOADER_SCRIPT"
+    ok "    BPF/XDP Loader finished."
+else
+    warn "    BPF Loader script not found at $BPF_LOADER_SCRIPT. Skipping BPF rules."
+fi
+# --- [Revolutionary Tech] End BPF/XDP Loader ---
+# #
+
+# #
 #   Loader
 # #
 

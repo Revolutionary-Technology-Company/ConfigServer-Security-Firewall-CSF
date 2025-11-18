@@ -9,6 +9,8 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service >/dev/null 2>&1
     systemctl stop rt-gsb-poller.service >/dev/null 2>&1
+    # [NEW] Stop bpfilterd if it's running
+    systemctl stop bpfilterd.service >/dev/null 2>&1
 else
     # Fallback for non-systemd
     /etc/init.d/lfd stop >/dev/null 2>&1
@@ -41,6 +43,8 @@ iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/nul
 echo "Restoring kernel defaults..."
 # Remove our tuning files
 rm -fv /etc/sysctl.d/99-csf-tuning.conf
+# [FIX] Added RT conntrack file to removal list
+rm -fv /etc/sysctl.d/98-revolutionary-tech-conntrack.conf
 # Reload sysctl to restore defaults (or OS-provided values)
 sysctl --system >/dev/null 2>&1
 
@@ -64,12 +68,16 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
     systemctl disable rt-gsb-poller.service >/dev/null 2>&1
+    # [NEW] Disable bpfilterd service
+    systemctl disable bpfilterd.service >/dev/null 2>&1
 
     rm -fv /usr/lib/systemd/system/csf.service
     rm -fv /usr/lib/systemd/system/lfd.service
     rm -fv /etc/systemd/system/modsec3-converter.service
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
     rm -fv /etc/systemd/system/rt-gsb-poller.service
+    # [NEW] Remove bpfilterd service file
+    rm -fv /etc/systemd/system/bpfilterd.service
     
     systemctl daemon-reload
 else
@@ -119,6 +127,15 @@ rm -fv /usr/local/cwpsrv/htdocs/resources/admin/modules/csfofficial.php
 rm -fv /usr/local/cwpsrv/htdocs/resources/admin/modules/csf.pl
 rm -fv /usr/local/cwpsrv/htdocs/resources/admin/addons/ajax/ajax_csfframe.php
 rm -Rfv /usr/local/cwpsrv/htdocs/admin/design/csf/
+
+# [NEW] Remove BPF/XDP Binaries & Rules
+echo "Removing BPF/XDP Binaries, Rules, and Build Files..."
+rm -fv /usr/local/sbin/iptables-bpf
+rm -fv /usr/local/sbin/bpfilterd
+rm -fv /usr/local/csf/bin/csf-bpf-loader.sh
+rm -Rfv /etc/csf/bpf.d
+rm -Rfv /usr/src/rt-build
+# [END NEW]
 
 # Remove Auto-Tuner & Hardware Acceleration files
 echo "Removing Auto-Tuner and Acceleration tools..."
