@@ -4,11 +4,13 @@
 #   @website            https://configserver.shop
 #   @docs               https://docs.configserver.shop
 #   @download           https://download.configserver.shop
+#   
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
 #                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
-#                       Copyright (C) 2006-2025 Jonathan Michaelson
+#         
+#               Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
 #   @updated            09.26.2025
@@ -45,3 +47,12 @@
 #           csf.ignore.
 # #
 
+# --- [ADDED] Google ASN Whitelist ---
+ASN:15169 # Google ASN
+ASN:36040 # Google ASN
+ASN:43515 # Google ASN
+ASN:36561 # Google ASN
+ASN:19527 # Google ASN
+ASN:139070 # Google ASN
+ASN:396982 # Google ASN
+# --- [ADDED] End Google ASN Block ---
