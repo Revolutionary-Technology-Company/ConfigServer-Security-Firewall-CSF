@@ -22,10 +22,8 @@
 #   This program is distributed in the hope that it will be useful, but
 #   WITHOUT ANY WARRANTY; without even the implied warranty of
 #   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
+Normal install          sh install.sh
+#               Dryrun install          sh install.sh --dryrun
 # #
 
 umask 0177
@@ -95,29 +93,36 @@ else
     echo
 fi
 #
-# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
+# --- [Revolutionary Tech] Install Build Dependencies (bpfilter, eBPF, Tarpit) & Sign Modules ---
 #
-print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
+print "    Installing Build Dependencies (bpfilter, eBPF, Tarpit)..."
 rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
 
 if [ -f /usr/bin/apt-get ]; then
     # --- This is a Debian or Ubuntu system ---
     print "    > Detected apt package manager (Debian/Ubuntu)."
     export DEBIAN_FRONTEND=noninteractive
-    # Install dependencies for signing and building
+    # Install dependencies for building bpfilter, eBPF, and tarpit
     apt-get update -y > /dev/null 2>&1
-    apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
+    apt-get install -y git make gcc clang llvm cmake libbpf-dev libxdp-dev \
+    libmnl-dev libgmp-dev libnftnl-dev libxtables-dev libnl-3-dev bison flex \
+    xtables-addons-common xtables-addons-dkms openssl mokutil \
+    linux-headers-$(uname -r) > /dev/null 2>&1
+    print "    > Build dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
     # --- This is a Red Hat, CentOS, or AlmaLinux system ---
     print "    > Detected yum package manager (RHEL/CentOS/AlmaLinux)."
     yum install epel-release -y > /dev/null 2>&1
-    # Install dependencies for signing and building
-    yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
+    # Install dependencies for building bpfilter, eBPF, and tarpit
+    yum install -y git make gcc clang llvm cmake libbpf-devel libxdp-devel \
+    libmnl-devel gmp-devel libnftnl-devel xtables-devel libnl3-devel bison flex \
+    xtables-addons-kmod xtables-addons openssl mokutil \
+    kernel-devel-$(uname -r) > /dev/null 2>&1
+    print "    > Build dependencies installed."
+    
 else
-    print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
+    print "    ${redl}WARNING:${greym} Could not find apt or yum. Build dependencies must be installed manually."
 fi
 
 # --- [Revolutionary Tech] Secure Boot Module Signing ---
@@ -147,7 +152,73 @@ if ! modprobe xt_TARPIT; then
 else
     print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
 fi
-# --- [Revolutionary Tech] End Tarpit Block ---
+# --- [Revolutionary Tech] End Build Dependencies Block ---
+#
+
+#
+# --- [Revolutionary Tech] Build bpfilter & Patched iptables ---
+#
+print "    Building bpfilter and 'iptables-bpf' integration..."
+BUILD_DIR="/usr/src/rt-build"
+BPF_IPTABLES_BIN="/usr/local/sbin/iptables-bpf"
+BPF_DAEMON_BIN="/usr/local/sbin/bpfilterd"
+BPFILTER_REPO="https://github.com/facebook/bpfilter.git"
+
+# --- 1. Clean and create build directory ---
+print "    > Preparing build directory: $BUILD_DIR"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+if [ ! -d "$BUILD_DIR" ]; then
+    error "    ❌ FAILED: Could not create build directory $BUILD_DIR. Aborting bpfilter build."
+else
+    # --- 2. Clone the repository ---
+    print "    > Cloning $BPFILTER_REPO..."
+    git clone --depth 1 "$BPFILTER_REPO" "$BUILD_DIR" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        error "    ❌ FAILED: Could not clone bpfilter repository. Aborting bpfilter build."
+    else
+        print "    > Repository cloned successfully."
+        
+        # --- 3. Build the patched iptables ---
+        print "    > Building 'iptables-bpf' (This may take a few minutes)..."
+        cd "$BUILD_DIR"
+        
+        # Configure using CMake (disables docs/tests for a faster build)
+        cmake -S . -B build -DNO_DOCS=ON -DNO_TESTS=ON -DNO_CHECKS=ON -DNO_BENCHMARKS=ON > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            error "    ❌ FAILED: cmake configuration failed. Aborting bpfilter build."
+        else
+            # Build the custom iptables target
+            make -C build iptables > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                error "    ❌ FAILED: 'make iptables' command failed. Aborting bpfilter build."
+            else
+                # --- 4. Install the new binary ---
+                print "    > Build successful. Installing binaries..."
+                if [ -f "build/output/sbin/iptables-bpf" ]; then
+                    cp "build/output/sbin/iptables-bpf" "$BPF_IPTABLES_BIN"
+                    chmod +x "$BPF_IPTABLES_BIN"
+                    ok "    > Installed: $BPF_IPTABLES_BIN"
+                else
+                    error "    ❌ FAILED: Cannot find built binary 'build/output/sbin/iptables-bpf'."
+                fi
+                
+                # --- 5. Install the bpfilter daemon ---
+                if [ -f "build/output/sbin/bpfilter" ]; then
+                    cp "build/output/sbin/bpfilter" "$BPF_DAEMON_BIN"
+                    chmod +x "$BPF_DAEMON_BIN"
+                    ok "    > Installed: $BPF_DAEMON_BIN"
+                else
+                    error "    ❌ FAILED: Cannot find built binary 'build/output/sbin/bpfilter'."
+                fi
+            fi
+        fi
+        
+        # Return to original script directory
+        cd "$script_dir"
+    fi
+fi
+# --- [Revolutionary Tech] End bpfilter Build Block ---
 #
 
 mkdir -v -m 0600 /etc/csf
@@ -588,7 +659,7 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.interworx.pl
 ./auto.interworx.pl $OLDVERSION
 
-if test `cat /proc/1/comm` = "systemd"
+if test \`cat /proc/1/comm\` = "systemd"
 then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then
@@ -930,5 +1001,4 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
-}
 }
