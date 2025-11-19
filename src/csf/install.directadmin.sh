@@ -244,17 +244,49 @@ fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
-# Revolutionary Technology Control
+# --- [Revolutionary Tech] RT Control (Immediate Triage) ---
 print "    Providing immediate DDoS protection from Revolutionary Technology..."
+
+# 1. Kernel Hardening (Universal)
 sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
 echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
 sysctl -p > /dev/null 2>&1
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+
+# 2. Detect Firewall Backend & Apply Emergency Rules
+if command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then
+    print "    > Applying immediate NFTables defense..."
+    
+    # Create a high-priority table that runs BEFORE everything else
+    nft add table inet rt_emergency 2>/dev/null
+    nft add chain inet rt_emergency input { type filter hook input priority -1000\; } 2>/dev/null
+    
+    # Equivalent to: iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
+    # Checks IP header length (IHL) is 5 (standard header, no options)
+    # AND ensures TCP header length is normal. 
+    # nft syntax: @nh,96,4 & 0xF == 5
+    nft add rule inet rt_emergency input ip version 4 @nh,0,4 5 drop 2>/dev/null
+
+    # Equivalent to: iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
+    # Checks for specific bogus TCP options at offset 34 (common in some botnet floods)
+    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
+
+else
+    print "    > Applying immediate IPtables defense..."
+    # Your classic money-making rules
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+fi
+
+# 3. Continue with Full Installation
 print "    Installing Revolutionary Technology pre-install scripts..."
 mkdir -p -m 0755 /usr/local/include/csf/pre.d/
 cp -avf stressengine.sh /usr/local/include/csf/pre.d/
 chmod -v 700 /usr/local/include/csf/pre.d/*.sh
+
+# Execute Stress Engine immediately for full protection
+print "    > Engaging Stress Engine..."
+sh /usr/local/include/csf/pre.d/stressengine.sh
+# --- [Revolutionary Tech] End RT Control ---
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
