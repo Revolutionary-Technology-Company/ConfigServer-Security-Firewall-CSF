@@ -1,33 +1,51 @@
 #!/bin/bash
 # #
-#   @script             Revolutionary Technology Stress Engine (v5.2 - Final)
+#   @script             Revolutionary Technology Stress Engine (v5.3 - Tuned)
 #   @description        Hybrid Driver (XDP) + Kernel (NFT/IPT) Defense Layer.
-#                       Enforces Packet Validity, Dynamic Tarpits, and SYN Proxy.
+#                       Respects Auto-Tuner resource limits from csf.conf.
 #   @copyright          Copyright (C) 2025 Revolutionary Technology
 # #
 
 echo "[RT-StressEngine] Loading Revolutionary Technology Stress Engine..."
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION & TOOLS ---
 CSF_CONF="/etc/csf/csf.conf"
 DENY_PERM="/etc/csf/csf.deny"
 DENY_TEMP="/var/lib/csf/csf.tempban"
 BPF_LOADER="/usr/local/csf/bin/csf-bpf-loader.sh"
 
-# Detect Tools
 NFT=$(which nft 2>/dev/null)
 IPTABLES=$(which iptables || echo "/sbin/iptables")
 IPSET=$(which ipset || echo "/usr/sbin/ipset")
 
-# Read Config (ReadOnly)
+# --- READ AUTO-TUNED VALUES ---
+# We must respect the 12% resource slice calculated by the installer.
+
+# 1. Tarpit Timeout
 RT_TARPIT_TIMEOUT=$(grep "^RT_TARPIT_TIMEOUT" "$CSF_CONF" | cut -d'"' -f2)
-: "${RT_TARPIT_TIMEOUT:=600}" # Default to 10m if not set
+: "${RT_TARPIT_TIMEOUT:=600}"
+
+# 2. IPSet / Table Size (Tuned by RAM)
+LF_IPSET_MAXELEM=$(grep "^LF_IPSET_MAXELEM" "$CSF_CONF" | cut -d'"' -f2)
+: "${LF_IPSET_MAXELEM:=65535}"
+
+# 3. Rate Limits (Tuned by CPU Cores)
+SYNFLOOD_RATE=$(grep "^SYNFLOOD_RATE" "$CSF_CONF" | cut -d'"' -f2)
+: "${SYNFLOOD_RATE:=100/s}"
+# NFTables prefers "100/second" but accepts "100/s". We normalize just in case.
+SYNFLOOD_RATE_NFT=$(echo "$SYNFLOOD_RATE" | sed 's/\/s/\/second/')
+
+SYNFLOOD_BURST=$(grep "^SYNFLOOD_BURST" "$CSF_CONF" | cut -d'"' -f2)
+: "${SYNFLOOD_BURST:=150}"
+
+echo "[RT-StressEngine] Configuration Loaded:"
+echo "    - Timeout: ${RT_TARPIT_TIMEOUT}s"
+echo "    - Max Elements: ${LF_IPSET_MAXELEM}"
+echo "    - Rate Limit: ${SYNFLOOD_RATE} (Burst: ${SYNFLOOD_BURST})"
 
 # ==============================================================================
 # 1. HARDWARE OFFLOADING (XDP/BPF) - Layer 0
 # ==============================================================================
-# This runs at the driver level. It handles the "Strict UDP" dropping based on
-# csf.conf (UDP_IN), so we don't need to do it here.
 if [ -f "$BPF_LOADER" ] && [ -x "$BPF_LOADER" ]; then
     echo "[RT-StressEngine] Loading XDP/BPF hardware filters..."
     $BPF_LOADER
@@ -40,12 +58,10 @@ fi
 # ==============================================================================
 MODE="IPTABLES"
 if [ ! -z "$NFT" ]; then
-    # Check if nftables is usable (kernel support + binary)
     if $NFT list ruleset >/dev/null 2>&1; then
         MODE="NFTABLES"
     fi
 fi
-
 echo "[RT-StressEngine] Active Firewall Mode: $MODE"
 
 # ==============================================================================
@@ -54,23 +70,19 @@ echo "[RT-StressEngine] Active Firewall Mode: $MODE"
 if [ "$MODE" == "NFTABLES" ]; then
     echo "[RT-StressEngine] Applying Native NFTables Rulesets..."
 
-    # Apply Kernel Hardening (Sysctl) - Validity Enforcement
     sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
-    sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1 # Drop RST packets for TIME-WAIT sockets
+    sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1
 
-    # We use a priority of -10 to run BEFORE standard CSF (filter) rules.
-    # This ensures garbage traffic is dropped before CSF wastes CPU logging it.
     $NFT -f - <<EOF
     table inet rt_security {
-        # Dynamic Penalty Box (The "Tar Pit" Set)
+        # Dynamic Penalty Box (Respects Tuned Size)
         set rt_penalty_box {
             type ipv4_addr
             flags dynamic, timeout
             timeout ${RT_TARPIT_TIMEOUT}s
-            size 65535
+            size ${LF_IPSET_MAXELEM}
         }
 
-        # SYN Proxy Chain (Handshake Offloading)
         chain rt_synproxy {
             synproxy roughen tcp mss 1460 wscale 80 sack yes timestamp yes accept
         }
@@ -78,49 +90,35 @@ if [ "$MODE" == "NFTABLES" ]; then
         chain input {
             type filter hook input priority -10; policy accept;
 
-            # --- A. PACKET VALIDITY (Sanity Checks) ---
-            # Drop invalid packets (out of state, malformed)
             ct state invalid drop
-            
-            # Drop packets claiming to be related/established but invalid
             ct state established, related accept
 
-            # --- B. Enforce Penalty Box ---
+            # Enforce Penalty Box
             ip saddr @rt_penalty_box drop
 
-            # --- C. TCP Validity Enforcement ---
-            # Drop NEW packets that do not have the SYN flag (e.g. FIN scans, Null scans)
+            # Validity Checks
             tcp flags & (fin|syn|rst|ack) != syn ct state new drop
+            tcp flags & (fin|syn|rst|psh|ack|urg) == 0 drop
+            tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop
             
-            # Drop Bogus TCP Flags (Impossible combinations)
-            tcp flags & (fin|syn|rst|psh|ack|urg) == 0 drop              # Null packet
-            tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop # XMAS packet
-            tcp flags & (fin|syn) == (fin|syn) drop                      # SYN-FIN
-
-            # --- D. "Revolutionary Tech" Signatures ---
-            # Bogus TCP Options (Offset 34 pattern)
+            # Signatures
             @th,272,16 0x40 drop
-            # Malformed IP Header Length
             @nh,96,4 & 0x000F0000 == 0x50000 drop
 
-            # --- E. SYN Flood Mitigation (SYN Proxy) ---
-            # Offload Handshakes for Web Ports
+            # SYN Proxy
             tcp dport { 80, 443 } tcp flags & (fin|syn|rst|ack) == syn jump rt_synproxy
 
-            # --- F. Dynamic Rate Limiting ---
-            # If > 50 new SYNs/sec, add to Penalty Box for configured timeout
+            # Dynamic Rate Limiting (Respects Tuned Rate/Burst)
             tcp flags & (fin|syn|rst|ack) == syn \
-                limit rate 50/second burst 100 packets \
+                limit rate ${SYNFLOOD_RATE_NFT} burst ${SYNFLOOD_BURST} packets \
                 add @rt_penalty_box { ip saddr }
 
-            # --- G. ICMP Flood Protection ---
             icmp type echo-request limit rate 5/second accept
             icmp type echo-request drop
         }
     }
 EOF
 
-    # Populate Static Blocks (Optional - usually handled by CSF, but good for redundancy)
     if [ -f "$DENY_PERM" ]; then
         grep -vE "^#|^$" "$DENY_PERM" | awk '{print $1}' | while read IP; do
             $NFT add element inet rt_security rt_penalty_box { $IP timeout 30d } 2>/dev/null
@@ -133,11 +131,9 @@ EOF
 else
     echo "[RT-StressEngine] Applying Legacy IPtables Rulesets..."
     
-    # Kernel Hardening
     sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
     sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1
 
-    # Setup Chains
     $IPTABLES -t raw -F RT_STRESS_ENGINE_RAW 2>/dev/null
     $IPTABLES -t raw -X RT_STRESS_ENGINE_RAW 2>/dev/null
     $IPTABLES -t filter -F RT_STRESS_ENGINE_FILTER 2>/dev/null
@@ -148,24 +144,18 @@ else
     $IPTABLES -t raw -I PREROUTING 1 -j RT_STRESS_ENGINE_RAW
     $IPTABLES -I INPUT 1 -j RT_STRESS_ENGINE_FILTER
 
-    # Create IP Sets
+    # Create IP Sets using Tuned Max Elements
     $IPSET create rt_google_safesites hash:net comment -exist >/dev/null 2>&1
-    $IPSET create rt_stress_block hash:ip hashsize 4096 maxelem 200000 timeout $RT_TARPIT_TIMEOUT -exist >/dev/null 2>&1
+    $IPSET create rt_stress_block hash:ip hashsize 4096 maxelem ${LF_IPSET_MAXELEM} timeout $RT_TARPIT_TIMEOUT -exist >/dev/null 2>&1
     $IPSET flush rt_stress_block
 
-    # 1. Allow Google (Bypass Validity Checks to prevent false positives on crawlers)
     $IPTABLES -t raw -I RT_STRESS_ENGINE_RAW 1 -m set --match-set rt_google_safesites src -j ACCEPT
 
-    # 2. Packet Validity (Stateless / Raw)
     $IPTABLES -t raw -A RT_STRESS_ENGINE_RAW -p tcp --tcp-flags ALL NONE -j DROP
     $IPTABLES -t raw -A RT_STRESS_ENGINE_RAW -p tcp --tcp-flags ALL ALL -j DROP
-    $IPTABLES -t raw -A RT_STRESS_ENGINE_RAW -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
-
-    # 3. "Revolutionary Tech" Signatures
     $IPTABLES -A RT_STRESS_ENGINE_FILTER -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
     $IPTABLES -A RT_STRESS_ENGINE_FILTER -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
 
-    # Determine Drop Target (Configured by User)
     DROP_SETTING=$(grep -E '^\s*DROP\s*=' "$CSF_CONF" | sed -e 's/ //g' -e 's/"//g' | cut -d'=' -f2)
     case "$DROP_SETTING" in
         TARPIT) TARGET_MODULE="TARPIT"; TARGET_OPTS="" ;;
@@ -174,22 +164,20 @@ else
         *)      TARGET_MODULE="DROP"; TARGET_OPTS="" ;;
     esac
 
-    # 4. Apply Blocks (The Punishment)
     $IPTABLES -t raw -A RT_STRESS_ENGINE_RAW -m set --match-set rt_stress_block src -j NOTRACK
     
     if [ "$TARGET_MODULE" == "DROP" ]; then
         $IPTABLES -A RT_STRESS_ENGINE_FILTER -m set --match-set rt_stress_block src -j DROP
     else
-        # Only TCP can be Tarpitted/Deluded
         $IPTABLES -A RT_STRESS_ENGINE_FILTER -m set --match-set rt_stress_block src -p tcp -j $TARGET_MODULE $TARGET_OPTS
         $IPTABLES -A RT_STRESS_ENGINE_FILTER -m set --match-set rt_stress_block src -j DROP
     fi
     
-    # 5. Rate Limit to Dynamic Set
+    # Rate Limit using Tuned Values
     $IPTABLES -A RT_STRESS_ENGINE_FILTER -p tcp --syn -m hashlimit \
         --hashlimit-name rt_flood \
-        --hashlimit-above 50/sec \
-        --hashlimit-burst 100 \
+        --hashlimit-above ${SYNFLOOD_RATE} \
+        --hashlimit-burst ${SYNFLOOD_BURST} \
         --hashlimit-mode srcip \
         -j SET --add-set rt_stress_block src --timeout $RT_TARPIT_TIMEOUT
 fi
