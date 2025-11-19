@@ -30,6 +30,53 @@ ChangeLog:
 		version_check.php) to validate purchases.
 		All product updates and version checks for v2.15.xx now require
 		a valid serial KEY for authentication.
+		
+		
+		Updated Configuration Defaults:
+		* 'csf.conf' defaults updated: TESTING = "0" and LF_IPSET = "1" for
+		immediate production readiness.
+		* Added 'RT_TARPIT_TIMEOUT', 'RT_UDP_XDP_STRICT', and
+		'RT_TCP_XDP_STRICT' configuration options.
+
+		Security Enhancements:
+		* Added specific hex signatures to drop packets from common "booter" /
+		stress-testing tools at the pre-routing stage.
+		* Added DELUDE and CHAOS targets to confuse port scanners by
+		randomizing TCP responses.
+		
+		Added "Hybrid Firewall Engine" (NFTables + IPtables):
+		* Integrated intelligent auto-detection to determine if the host OS
+		supports modern nftables or legacy iptables.
+		* Implemented full feature parity for nftables, including SYN Proxy,
+		Flowtables, and Dynamic Sets (The "Penalty Box").
+		* Maintains robust backward compatibility for older kernels using
+		ipset and iptables.
+
+		Added "Immediate Triage" Control Block:
+		* Installers now inject a high-priority rule set that applies raw
+		packet signature drops instantly upon installation start.
+		* This provides immediate relief during active attacks, even before
+		the full firewall stack is configured.
+
+		Added Unix Kernel Management (XDP/eBPF):
+		* Introduced 'bpfilter' build system to compile 'iptables-bpf' from
+		source on the target machine.
+		* Added 'csf_xdp_drop.c': A custom BPF program for NIC-level packet
+		dropping.
+		* Added 'csf-bpf-loader.sh': Automated loader that detects the WAN
+		interface and attaches XDP programs.
+		* Implemented 'RT_UDP_XDP_STRICT': Zero-Trust mode that drops ALL
+		incoming UDP packets at the driver level unless explicitly
+		whitelisted.
+		* Implemented 'RT_TCP_XDP_STRICT': Optional mode to drop all
+		non-whitelisted TCP traffic at the NIC.
+
+		Added Application Hardening (AppArmor):
+		* Added 'install-apparmor.sh' to detect, install, and enforce AppArmor
+		profiles.
+		* Included strict profiles for sshd, httpd (Apache/LiteSpeed), and
+		exim to prevent shell execution (RCE) and unauthorized file access
+		by compromised services.
 
 		Revolutionary Technology's Hardware offloading engine activates
 		NIC microprocessors to handle all packet filtering. This frees server CPU
@@ -63,6 +110,9 @@ ChangeLog:
 		When DROP = "TARPIT" is enabled by the user, CSF now uses the
 		high-performance, stateless xt_TARPIT module (via NOTRACK)
 		to conserve system memory and degrade attackers.
+		* 'stressengine.sh' rewritten to be "Auto-Tuner Compliant," respecting
+		the resource limits (Set Size, Rate Limits) calculated during
+		installation.
 
 		Integrated new kernel-level SYN Flood Protection engine.
 		Installer now applies sysctl hardening rules for tcp_syncookies,
