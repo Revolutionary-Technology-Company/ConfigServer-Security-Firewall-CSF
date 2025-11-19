@@ -1,13 +1,17 @@
 // 
-// CSF XDP Drop Actions
+// CSF XDP Drop Actions & UDP Whitelist
 // Implements high-performance packet handling for common firewall targets.
 //
 // Targets:
 //   DROP   -> XDP_DROP (Silent, immediate drop)
 //   ECHO   -> XDP_TX   (Reflect packet back to sender)
-//   REJECT -> XDP_TX   (Reflects, effectively rejecting without RST generation complexity)
 //
-
+// Features:
+//   1. Dynamic IP Blacklist (Source IP)
+//   2. Zero-Trust TCP & UDP Whitelist (Destination Port)
+// 
+// CSF XDP Drop Actions & Zero Trust Whitelisting
+//
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
@@ -17,11 +21,9 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
-// Define a map to store blocked IPs and their action code
-// Key: IP Address (u32), Value: Action Code (u32)
-// Action Codes:
-//   0 = XDP_DROP (DROP, TARPIT, DELUDE - simplify to drop for speed)
-//   1 = XDP_TX   (ECHO, REJECT - bounce back)
+// -----------------------------------------------------------------------------
+// MAP 1: Blocked IPs (Source IP)
+// -----------------------------------------------------------------------------
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 100000);
@@ -29,20 +31,48 @@ struct {
     __type(value, __u32);
 } csf_drop_map SEC(".maps");
 
-// Helper to swap MAC addresses for XDP_TX (Echo)
-static inline void swap_src_dst_mac(void *data) {
-    struct ethhdr *eth = data;
-    unsigned char tmp[ETH_ALEN];
-    __builtin_memcpy(tmp, eth->h_source, ETH_ALEN);
-    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
-    __builtin_memcpy(eth->h_dest, tmp, ETH_ALEN);
-}
+// -----------------------------------------------------------------------------
+// MAP 2: Allowed UDP Ports (Destination Port)
+// -----------------------------------------------------------------------------
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_udp_allow_map SEC(".maps");
 
-// Helper to swap IP addresses for XDP_TX
-static inline void swap_src_dst_ipv4(struct iphdr *ip) {
-    __u32 tmp = ip->saddr;
+// -----------------------------------------------------------------------------
+// MAP 3: Allowed TCP Ports (Destination Port) [NEW]
+// -----------------------------------------------------------------------------
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_tcp_allow_map SEC(".maps");
+
+// -----------------------------------------------------------------------------
+// MAP 4: Configuration Flags [NEW]
+// Key 0: RT_UDP_XDP_STRICT (0=Off, 1=On)
+// Key 1: RT_TCP_XDP_STRICT (0=Off, 1=On)
+// -----------------------------------------------------------------------------
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 2);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_conf_map SEC(".maps");
+
+// Helper to swap addresses for ECHO (Reflect)
+static inline void swap_src_dst(void *data, struct ethhdr *eth, struct iphdr *ip) {
+    unsigned char tmp_mac[ETH_ALEN];
+    __builtin_memcpy(tmp_mac, eth->h_source, ETH_ALEN);
+    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(eth->h_dest, tmp_mac, ETH_ALEN);
+    
+    __u32 tmp_ip = ip->saddr;
     ip->saddr = ip->daddr;
-    ip->daddr = tmp;
+    ip->daddr = tmp_ip;
 }
 
 SEC("xdp")
@@ -52,45 +82,62 @@ int csf_firewall_prog(struct xdp_md *ctx) {
     struct ethhdr *eth = data;
     struct iphdr *ip;
 
-    // sanity check
-    if ((void *)(eth + 1) > data_end)
-        return XDP_PASS;
-
-    // Only handle IPv4 for now
-    if (eth->h_proto != bpf_htons(ETH_P_IP))
-        return XDP_PASS;
+    if ((void *)(eth + 1) > data_end) return XDP_PASS;
+    if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;
 
     ip = (void *)(eth + 1);
-    if ((void *)(ip + 1) > data_end)
-        return XDP_PASS;
+    if ((void *)(ip + 1) > data_end) return XDP_PASS;
 
-    // Lookup Source IP in our map
+    // ------------------------------------------------------
+    // 1. Check Dynamic Blocklist
+    // ------------------------------------------------------
     __u32 src_ip = ip->saddr;
     __u32 *action = bpf_map_lookup_elem(&csf_drop_map, &src_ip);
 
     if (action) {
-        // Found in blocklist! Check action code.
-        
-        // Action 0: DROP (Standard Drop, Tarpit, etc.)
-        if (*action == 0) {
-            return XDP_DROP;
+        if (*action == 1) { // ECHO
+            swap_src_dst(data, eth, ip);
+            return XDP_TX;
         }
+        return XDP_DROP; // Default DROP
+    }
 
-        // Action 1: ECHO / REJECT (Reflect packet)
-        if (*action == 1) {
-            // We need to modify the packet to send it back
-            swap_src_dst_mac(data);
-            swap_src_dst_ipv4(ip);
-            
-            // Recalculate checksum (simplified, assuming HW offload will fix or irrelevant for flood)
-            // Note: For TCP/UDP ports, we'd swap them too, but purely swapping IPs/MACs 
-            // is often enough to "echo" the traffic load back.
-            
-            return XDP_TX; 
+    // ------------------------------------------------------
+    // 2. Strict UDP Whitelist
+    // ------------------------------------------------------
+    if (ip->protocol == IPPROTO_UDP) {
+        __u32 key_udp_strict = 0;
+        __u32 *udp_strict_flag = bpf_map_lookup_elem(&csf_conf_map, &key_udp_strict);
+
+        // Only enforce if flag is set to 1
+        if (udp_strict_flag && *udp_strict_flag == 1) {
+            struct udphdr *udp = (void*)ip + sizeof(*ip);
+            if ((void*)udp + sizeof(*udp) > data_end) return XDP_PASS;
+
+            __u32 dest_port = bpf_ntohs(udp->dest);
+            __u32 *allowed = bpf_map_lookup_elem(&csf_udp_allow_map, &dest_port);
+
+            if (!allowed) return XDP_DROP;
         }
-        
-        // Default fallback if unknown action code
-        return XDP_DROP; 
+    }
+
+    // ------------------------------------------------------
+    // 3. Strict TCP Whitelist [NEW]
+    // ------------------------------------------------------
+    if (ip->protocol == IPPROTO_TCP) {
+        __u32 key_tcp_strict = 1;
+        __u32 *tcp_strict_flag = bpf_map_lookup_elem(&csf_conf_map, &key_tcp_strict);
+
+        // Only enforce if flag is set to 1
+        if (tcp_strict_flag && *tcp_strict_flag == 1) {
+            struct tcphdr *tcp = (void*)ip + sizeof(*ip);
+            if ((void*)tcp + sizeof(*tcp) > data_end) return XDP_PASS;
+
+            __u32 dest_port = bpf_ntohs(tcp->dest);
+            __u32 *allowed = bpf_map_lookup_elem(&csf_tcp_allow_map, &dest_port);
+
+            if (!allowed) return XDP_DROP;
+        }
     }
 
     return XDP_PASS;

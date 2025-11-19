@@ -1,126 +1,163 @@
-#!/bin/sh
+#!/bin/bash
 # #
 #   @app                ConfigServer Firewall & Security (CSF)
-#   @script             BPF/XDP Rule Loader
-#   @desc               Loads custom eBPF/XDP rules onto network interfaces.
-#                       Called by csfpre.sh.
+#   @script             BPF/XDP Rule Loader & Map Populator
+#   @desc               Loads compiled BPF bytecode and populates kernel maps
+#                       from csf.conf settings.
 #   @website            https://configserver.shop
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
-#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+#   @copyright          Copyright (C) 2025-2026 Revolutionary Technology
 #   @license            GPLv3
-#   @updated            11.18.2025
 # #
 
 # #
-#   This script finds all physical network interfaces and attempts to load a
-#   corresponding eBPF/XDP program from the bpf.d directory.
-#
-#   For example, for interface "eth0", it will look for:
-#   /etc/csf/bpf.d/eth0.o
-#
-#   It attaches the program to the "xdp" hook for maximum performance.
+#   Define Paths & Tools
 # #
-
-# #
-#   Define Paths
-# #
-BPF_RULES_DIR="/etc/csf/bpf.d"
+BPF_PROG="/etc/csf/bpf.d/csf_xdp_drop.o"
+CSF_CONF="/etc/csf/csf.conf"
 IP_BIN=$(command -v ip)
+BPFTOOL_BIN=$(command -v bpftool)
 
 # #
-#   Include global.sh for logging functions, if it exists
+#   Include global.sh for logging functions
 # #
 GLOBAL_SH="/etc/csf/global.sh"
-if [ ! -f "$GLOBAL_SH" ]; then
-    GLOBAL_SH="/usr/local/csf/lib/global.sh"
-fi
-
+if [ ! -f "$GLOBAL_SH" ]; then GLOBAL_SH="/usr/local/csf/lib/global.sh"; fi
 if [ -f "$GLOBAL_SH" ]; then
     . "$GLOBAL_SH"
 else
-    # Fallback logging functions if global.sh is not found
-    esc=$(printf '\033')
-    end="${esc}[0m"
-    bold="${esc}[1m"
-    redl="${esc}[0;91m"
-    bluel="${esc}[38;5;75m"
-    greenl="${esc}[38;5;76m"
-    greym="${esc}[38;5;244m"
-    yellowl="${esc}[38;5;190m"
-    peach="${esc}[38;5;210m]"
-    
-    error() { printf '%-28s %-65s\n' "  ${redl} ERROR ${end}" "${greym} $1 ${end}"; }
-    warn() { printf '%-32s %-65s\n' "  ${yellowl} WARN ${end}" "${greym} $1 ${end}"; }
-    status() { printf '%-31s %-65s\n' "  ${bluel} STATUS ${end}" "${greym} $1 ${end}"; }
-    ok() { printf '%-31s %-65s\n' "  ${greenl} OK ${end}" "${greym} $1 ${end}"; }
-    print() { printf '%-31s %-65s\n' "  ${peach}        ${end}" "${peach} $1 ${end}"; }
+    # Minimal fallback logging
+    print() { echo "  $1"; }
+    ok()    { echo "  [OK] $1"; }
+    error() { echo "  [ERR] $1"; }
+    warn()  { echo "  [WARN] $1"; }
 fi
 
-status "BPF Loader: Starting BPF/XDP rule loading process..."
-
+# #
+#   1. Pre-Flight Checks
+# #
 if [ ! -x "$IP_BIN" ]; then
-    error "BPF Loader: 'ip' command not found. Cannot load BPF rules. Aborting."
+    error "BPF Loader: 'ip' command not found. Aborting."
     exit 1
 fi
 
-if [ ! -d "$BPF_RULES_DIR" ]; then
-    warn "BPF Loader: Rules directory not found: $BPF_RULES_DIR. Skipping."
-    exit 0
+# Check for bpftool (Required for map population)
+if [ ! -x "$BPFTOOL_BIN" ]; then
+    warn "BPF Loader: 'bpftool' not found. XDP will load but Maps cannot be populated."
+    warn "            Zero Trust features will not function correctly."
+fi
+
+if [ ! -f "$BPF_PROG" ]; then
+    error "BPF Loader: BPF Object file not found at $BPF_PROG"
+    exit 1
 fi
 
 # #
-#   Find all physical (and vlan/bridge) interfaces
-#   - Ignores loopback, docker, virtual, etc.
+#   2. Read Configuration from csf.conf
 # #
-INTERFACES=$(ls -1 /sys/class/net | grep -vE '^(lo|docker|veth|virbr|vnet|tap)')
+print "Reading configuration from $CSF_CONF..."
 
-if [ -z "$INTERFACES" ]; then
-    warn "BPF Loader: No physical network interfaces found to attach rules."
-    exit 0
+# Extract values using grep to avoid sourcing the whole file
+RT_UDP_STRICT=$(grep "^RT_UDP_XDP_STRICT" "$CSF_CONF" | cut -d'"' -f2)
+RT_TCP_STRICT=$(grep "^RT_TCP_XDP_STRICT" "$CSF_CONF" | cut -d'"' -f2)
+UDP_IN_LIST=$(grep "^UDP_IN" "$CSF_CONF" | cut -d'"' -f2)
+TCP_IN_LIST=$(grep "^TCP_IN" "$CSF_CONF" | cut -d'"' -f2)
+
+# Set defaults if missing
+: "${RT_UDP_STRICT:=0}"
+: "${RT_TCP_STRICT:=0}"
+
+# #
+#   3. Detect Interface (Auto-detect main WAN interface)
+# #
+# Tries to find the interface with the default route
+IFACE=$($IP_BIN route get 1.1.1.1 | grep -oP 'dev \K\S+' | head -n1)
+
+if [ -z "$IFACE" ]; then
+    error "BPF Loader: Could not detect primary network interface."
+    exit 1
 fi
 
+print "Target Interface: ${bluel}$IFACE${greym}"
+
 # #
-#   Loop through each interface and apply rules
+#   4. Load XDP Program
 # #
-for IFACE in $INTERFACES; do
-    # This is the user's custom, per-interface rule file
-    CUSTOM_RULE_FILE="${BPF_RULES_DIR}/${IFACE}.o"
-    
-    status "BPF Loader: Checking interface: ${bluel}$IFACE${greym}"
-    
-    # --- 1. Unload any existing XDP program first ---
-    # This ensures a clean state and allows for rule reloading.
-    if "$IP_BIN" link show dev "$IFACE" | grep -q "xdp obj"; then
-        print "    > Found existing XDP program. Unloading..."
-        "$IP_BIN" link set dev "$IFACE" xdp off >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            ok "    > Unloaded old program from $IFACE."
-        else
-            error "    > FAILED to unload XDP program from $IFACE. Skipping."
-            continue
+
+# Unload existing to ensure clean state
+"$IP_BIN" link set dev "$IFACE" xdp off >/dev/null 2>&1
+
+# Load new program
+print "Loading XDP program into kernel..."
+"$IP_BIN" link set dev "$IFACE" xdp obj "$BPF_PROG" sec xdp >/dev/null 2>&1
+
+if [ $? -ne 0 ]; then
+    error "Failed to load XDP program on $IFACE. Check kernel compatibility."
+    exit 1
+fi
+
+ok "XDP Program loaded successfully."
+
+# #
+#   5. Populate BPF Maps
+# #
+if [ -x "$BPFTOOL_BIN" ]; then
+    print "Populating BPF Maps..."
+
+    # --- A. Configure Flags (Strict Mode) ---
+    # Get ID for 'csf_conf_map'
+    CONF_MAP_ID=$($BPFTOOL_BIN map show | grep csf_conf_map | awk '{print $1}' | tr -d ':')
+
+    if [ ! -z "$CONF_MAP_ID" ]; then
+        # Key 0 = UDP Strict Mode
+        $BPFTOOL_BIN map update id $CONF_MAP_ID key 0 0 0 0 value $RT_UDP_STRICT 0 0 0
+        # Key 1 = TCP Strict Mode
+        $BPFTOOL_BIN map update id $CONF_MAP_ID key 1 0 0 0 value $RT_TCP_STRICT 0 0 0
+        ok "Configuration flags pushed to kernel."
+    else
+        warn "Could not find 'csf_conf_map' in loaded program."
+    fi
+
+    # --- B. Populate UDP Whitelist ---
+    if [ "$RT_UDP_STRICT" == "1" ]; then
+        print "UDP Zero Trust Mode: ON. Populating whitelist..."
+        UDP_MAP_ID=$($BPFTOOL_BIN map show | grep csf_udp_allow_map | awk '{print $1}' | tr -d ':')
+        
+        if [ ! -z "$UDP_MAP_ID" ]; then
+            IFS=',' read -ra PORTS <<< "$UDP_IN_LIST"
+            for port in "${PORTS[@]}"; do
+                # Check if port is a valid integer (skip ranges for now)
+                if [[ "$port" =~ ^[0-9]+$ ]]; then
+                    # Update Map: Key=Port, Value=1
+                    $BPFTOOL_BIN map update id $UDP_MAP_ID key $port 0 0 0 value 1 0 0 0
+                fi
+            done
+            ok "UDP Whitelist populated."
         fi
     else
-        print "    > No existing XDP program found. Ready for loading."
+        print "UDP Zero Trust Mode: OFF."
     fi
 
-    # --- 2. Check if a custom rule file exists for this interface ---
-    if [ ! -f "$CUSTOM_RULE_FILE" ]; then
-        warn "    > No custom rule file found at $CUSTOM_RULE_FILE. Skipping interface $IFACE."
-        continue
-    fi
-    
-    # --- 3. Load the new XDP program ---
-    print "    > Found custom rule: $CUSTOM_RULE_FILE. Attaching to $IFACE..."
-    "$IP_BIN" link set dev "$IFACE" xdp obj "$CUSTOM_RULE_FILE" sec xdp >/dev/null 2>&1
-    
-    if [ $? -eq 0 ]; then
-        ok "    > ${greenl}Successfully loaded and attached BPF program to $IFACE.${greym}"
+    # --- C. Populate TCP Whitelist ---
+    if [ "$RT_TCP_STRICT" == "1" ]; then
+        print "TCP Zero Trust Mode: ON. Populating whitelist..."
+        TCP_MAP_ID=$($BPFTOOL_BIN map show | grep csf_tcp_allow_map | awk '{print $1}' | tr -d ':')
+        
+        if [ ! -z "$TCP_MAP_ID" ]; then
+            IFS=',' read -ra PORTS <<< "$TCP_IN_LIST"
+            for port in "${PORTS[@]}"; do
+                if [[ "$port" =~ ^[0-9]+$ ]]; then
+                    $BPFTOOL_BIN map update id $TCP_MAP_ID key $port 0 0 0 value 1 0 0 0
+                fi
+            done
+            ok "TCP Whitelist populated."
+        fi
     else
-        error "    > ${redl}FAILED to load BPF program $CUSTOM_RULE_FILE on $IFACE.${greym}"
-        error "    > This may be due to a kernel/driver incompatibility or an error in the BPF code."
+        print "TCP Zero Trust Mode: OFF."
     fi
-done
 
-ok "BPF Loader: Finished processing all interfaces."
+else
+    warn "Skipping map population (bpftool missing)."
+fi
+
+print "Revolutionary Technology BPF/XDP Engine Active."
