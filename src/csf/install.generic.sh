@@ -12,7 +12,7 @@
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.05.2025
+#   @updated            11.18.2025
 #   
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -93,6 +93,7 @@ else
     echo "...Perl modules OK"
     echo
 fi
+
 #
 # --- [Revolutionary Tech] Install Build Dependencies (bpfilter, eBPF, Tarpit) & Sign Modules ---
 #
@@ -254,6 +255,120 @@ if [ -d "bpf.d" ]; then
 else
     warn "    > 'bpf.d' directory not found in source. Skipping rules copy."
 fi
+
+# --- Compile the Drop/Echo Rule ---
+print "    > Compiling BPF Drop/Echo rule..."
+
+cat << 'EOF' > /etc/csf/bpf.d/csf_xdp_drop.c
+// 
+// CSF XDP Drop Actions
+// Implements high-performance packet handling for common firewall targets.
+//
+// Targets:
+//   DROP   -> XDP_DROP (Silent, immediate drop)
+//   ECHO   -> XDP_TX   (Reflect packet back to sender)
+//   REJECT -> XDP_TX   (Reflects, effectively rejecting without RST generation complexity)
+//
+
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+
+// Define a map to store blocked IPs and their action code
+// Key: IP Address (u32), Value: Action Code (u32)
+// Action Codes:
+//   0 = XDP_DROP (DROP, TARPIT, DELUDE - simplify to drop for speed)
+//   1 = XDP_TX   (ECHO, REJECT - bounce back)
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 100000);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_drop_map SEC(".maps");
+
+// Helper to swap MAC addresses for XDP_TX (Echo)
+static inline void swap_src_dst_mac(void *data) {
+    struct ethhdr *eth = data;
+    unsigned char tmp[ETH_ALEN];
+    __builtin_memcpy(tmp, eth->h_source, ETH_ALEN);
+    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(eth->h_dest, tmp, ETH_ALEN);
+}
+
+// Helper to swap IP addresses for XDP_TX
+static inline void swap_src_dst_ipv4(struct iphdr *ip) {
+    __u32 tmp = ip->saddr;
+    ip->saddr = ip->daddr;
+    ip->daddr = tmp;
+}
+
+SEC("xdp")
+int csf_firewall_prog(struct xdp_md *ctx) {
+    void *data_end = (void *)(long)ctx->data_end;
+    void *data = (void *)(long)ctx->data;
+    struct ethhdr *eth = data;
+    struct iphdr *ip;
+
+    // sanity check
+    if ((void *)(eth + 1) > data_end)
+        return XDP_PASS;
+
+    // Only handle IPv4 for now
+    if (eth->h_proto != bpf_htons(ETH_P_IP))
+        return XDP_PASS;
+
+    ip = (void *)(eth + 1);
+    if ((void *)(ip + 1) > data_end)
+        return XDP_PASS;
+
+    // Lookup Source IP in our map
+    __u32 src_ip = ip->saddr;
+    __u32 *action = bpf_map_lookup_elem(&csf_drop_map, &src_ip);
+
+    if (action) {
+        // Found in blocklist! Check action code.
+        
+        // Action 0: DROP (Standard Drop, Tarpit, etc.)
+        if (*action == 0) {
+            return XDP_DROP;
+        }
+
+        // Action 1: ECHO / REJECT (Reflect packet)
+        if (*action == 1) {
+            // We need to modify the packet to send it back
+            swap_src_dst_mac(data);
+            swap_src_dst_ipv4(ip);
+            return XDP_TX; 
+        }
+        
+        // Default fallback if unknown action code
+        return XDP_DROP; 
+    }
+
+    return XDP_PASS;
+}
+
+char _license[] SEC("license") = "GPL";
+EOF
+
+if command -v clang >/dev/null 2>&1; then
+    print "    > Compiling csf_xdp_drop.c..."
+    # Using -g for BTF if available, otherwise standard BPF target
+    clang -O2 -g -target bpf -c /etc/csf/bpf.d/csf_xdp_drop.c -o /etc/csf/bpf.d/csf_xdp_drop.o >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        ok "    > BPF Drop/Echo rule compiled successfully: /etc/csf/bpf.d/csf_xdp_drop.o"
+        chmod 644 /etc/csf/bpf.d/csf_xdp_drop.o
+    else
+        error "    > Failed to compile BPF Drop/Echo rule."
+    fi
+else
+    warn "    > clang not found. Cannot compile BPF rules."
+fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
@@ -272,6 +387,7 @@ if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
 fi
 
+# Use generic config
 if [ ! -e "/etc/csf/csf.conf" ]; then
 	cp -avf csf.generic.conf /etc/csf/csf.conf
 fi
@@ -604,13 +720,13 @@ ln -svf /usr/local/csf/lib/webmin /etc/csf/
 if [ ! -e "/etc/csf/alerts" ]; then
     ln -svf /usr/local/csf/tpl /etc/csf/alerts
 fi
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd > /dev/null 2>&1
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf > /dev/null 2>&1
 
-mkdir webmin/csf/images
-mkdir ui/images
-mkdir da/images
-mkdir interworx/images
+mkdir -p webmin/csf/images
+mkdir -p ui/images
+mkdir -p da/images
+mkdir -p interworx/images
 
 cp -avf csf/* webmin/csf/images/
 cp -avf csf/* ui/images/
@@ -618,7 +734,8 @@ cp -avf csf/* da/images/
 cp -avf csf/* interworx/images/
 
 cp -avf messenger/*.php /etc/csf/messenger/
-cp -avf uninstall.generic.sh /usr/local/csf/bin/uninstall.sh
+cp -avf csf/csf_small.png /usr/local/cpanel/whostmgr/docroot/addon_plugins/
+cp -avf uninstall.sh /usr/local/csf/bin/
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
@@ -651,10 +768,6 @@ cp -avf csf.conf /usr/local/csf/profiles/reset_to_defaults.conf
 cp -avf lfd.logrotate /etc/logrotate.d/lfd
 chcon --reference /etc/logrotate.d /etc/logrotate.d/lfd
 
-if [ -e "/usr/local/ispconfig/interface/web/csf/ispconfig_csf" ]; then
-    rm -Rfv /usr/local/ispconfig/interface/web/csf/
-fi
-
 rm -fv /etc/csf/csf.spamhaus /etc/csf/csf.dshield /etc/csf/csf.tor /etc/csf/csf.bogon
 
 mkdir -p /usr/local/man/man1/
@@ -673,7 +786,7 @@ chmod -R 600 /usr/local/csf/profiles
 chmod 600 /var/log/lfd.log*
 
 chmod -v 700 /usr/local/csf/bin/*.pl /usr/local/csf/bin/*.sh /usr/local/csf/bin/*.pm
-chmod -v 700 /etc/csf/*.pl /etc/csf/*.cgi /etc/csf/*.sh /etc/csf/*.php /etc/csf/*.py
+chmod -v 700 /etc/csf/*.pl
 chmod -v 700 /etc/csf/webmin/csf/index.cgi
 chmod -v 644 /etc/cron.d/lfd-cron
 chmod -v 644 /etc/cron.d/csf-cron
@@ -721,17 +834,17 @@ then
     cp -avf lfd.service /usr/lib/systemd/system/
     cp -avf csf.service /usr/lib/systemd/system/
 
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service > /dev/null 2>&1
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service > /dev/null 2>&1
 
     systemctl daemon-reload
 
-    systemctl enable csf.service
-    systemctl enable lfd.service
+    systemctl enable csf.service > /dev/null 2>&1
+    systemctl enable lfd.service > /dev/null 2>&1
 
-    systemctl disable firewalld
-    systemctl stop firewalld
-    systemctl mask firewalld
+    systemctl disable firewalld > /dev/null 2>&1
+    systemctl stop firewalld > /dev/null 2>&1
+    systemctl mask firewalld > /dev/null 2>&1
 else
     cp -avf lfd.sh /etc/init.d/lfd
     cp -avf csf.sh /etc/init.d/csf
@@ -988,7 +1101,7 @@ if [ -f "$CSF_CONF" ]; then
 	else
 	print "    "
 	print "    The setting ${yellowd}TESTING${greym} is currently ${redl}disabled${greym}; which is the"
-	print "    correct setting if you plan to start using your new firewall."
+	print "    correct setting if you plan to start using your firewall."
 	fi
 else
 	print "    "

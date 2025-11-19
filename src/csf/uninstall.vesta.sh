@@ -43,7 +43,7 @@ iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/nul
 echo "Restoring kernel defaults..."
 # Remove our tuning files
 rm -fv /etc/sysctl.d/99-csf-tuning.conf
-# [FIX] Added RT conntrack file to removal list
+# [NEW] Remove RT conntrack file
 rm -fv /etc/sysctl.d/98-revolutionary-tech-conntrack.conf
 # Reload sysctl to restore defaults (or OS-provided values)
 sysctl --system >/dev/null 2>&1

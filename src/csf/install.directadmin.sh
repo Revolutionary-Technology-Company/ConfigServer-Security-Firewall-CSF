@@ -9,10 +9,10 @@
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
 #                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
 #                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
-#   @copyright          Copyright (C) 2006-2025 Jonathan Michaelson
-#   @copyright          Copyright (C) 2006-2025 Way to the Web Ltd.
+#                       Copyright (C) 2006-2025 Jonathan Michaelson
+#                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.17.2025
+#   @updated            11.18.2025
 #   
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -29,7 +29,6 @@
 # #
 
 umask 0177
-
 
 # #
 #	Allow for execution from different relative directories
@@ -111,7 +110,6 @@ elif [ -f /usr/bin/yum ]; then
     xtables-addons-kmod xtables-addons openssl mokutil \
     kernel-devel-$(uname -r) > /dev/null 2>&1
     print "    > Build dependencies installed."
-    
 else
     print "    ${redl}WARNING:${greym} Could not find apt or yum. Build dependencies must be installed manually."
 fi
@@ -246,7 +244,7 @@ fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
-# --- [Revolutionary Tech] RT Control ---
+# Revolutionary Technology Control
 print "    Providing immediate DDoS protection from Revolutionary Technology..."
 sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
 echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
@@ -257,7 +255,6 @@ print "    Installing Revolutionary Technology pre-install scripts..."
 mkdir -p -m 0755 /usr/local/include/csf/pre.d/
 cp -avf stressengine.sh /usr/local/include/csf/pre.d/
 chmod -v 700 /usr/local/include/csf/pre.d/*.sh
-# --- [Revolutionary Tech] End RT Control ---
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
@@ -390,16 +387,17 @@ fi
 if [ ! -e "/usr/local/csf/tpl/queuealert.txt" ]; then
 	cp -avf queuealert.txt /usr/local/csf/tpl/.
 fi
-#
+if [ ! -e "/etc/csf/csf.conf" ]; then
+	cp -avf csf.directadmin.conf /etc/csf/csf.conf
+fi
+
 # --- [Revolutionary Tech] Set ModSecurity Log Path ---
-#
 if [ ! -z "$MODSEC_LOG_PATH" ]; then
     print "    Setting MODSEC_LOG = \"${MODSEC_LOG_PATH}\" in /etc/csf/csf.conf..."
     sed -i "s#^MODSEC_LOG = \".*\"#MODSEC_LOG = \"$MODSEC_LOG_PATH\"#" /etc/csf/csf.conf
 fi
-#
 # --- [Revolutionary Tech] End ModSecurity Log Path ---
-#
+
 if [ ! -e "/usr/local/csf/tpl/modsecipdbalert.txt" ]; then
 	cp -avf modsecipdbalert.txt /usr/local/csf/tpl/.
 fi
@@ -592,13 +590,13 @@ ln -svf /usr/local/csf/lib/webmin /etc/csf/
 if [ ! -e "/etc/csf/alerts" ]; then
     ln -svf /usr/local/csf/tpl /etc/csf/alerts
 fi
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd > /dev/null 2>&1
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf > /dev/null 2>&1
 
-mkdir webmin/csf/images
-mkdir ui/images
-mkdir da/images
-mkdir interworx/images
+mkdir -p webmin/csf/images
+mkdir -p ui/images
+mkdir -p da/images
+mkdir -p interworx/images
 
 cp -avf csf/* webmin/csf/images/
 cp -avf csf/* ui/images/
@@ -606,13 +604,16 @@ cp -avf csf/* da/images/
 cp -avf csf/* interworx/images/
 
 cp -avf messenger/*.php /etc/csf/messenger/
-# --- [Revolutionary Tech] Fix: Use the standard uninstall.sh ---
-cp -avf uninstall.sh /usr/local/csf/bin/uninstall.sh
+cp -avf uninstall.directadmin.sh /usr/local/csf/bin/uninstall.sh
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
+#
 # --- [Revolutionary Tech] Fix sanity.txt path ---
+# Was: cp -avf sanity.txt /usr/local/csf/lib/
+# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
 cp -avf sanity.txt /etc/csf/sanity.txt
+#
 cp -avf csf.rbls /usr/local/csf/lib/
 cp -avf restricted.txt /usr/local/csf/lib/
 cp -avf changelog.txt /etc/csf/
@@ -634,6 +635,7 @@ cp -avf ui/images /etc/csf/ui/.
 cp -avf profiles /usr/local/csf/
 cp -avf csf.conf /usr/local/csf/profiles/reset_to_defaults.conf
 cp -avf lfd.logrotate /etc/logrotate.d/lfd
+chcon --reference /etc/logrotate.d /etc/logrotate.d/lfd
 
 rm -fv /etc/csf/csf.spamhaus /etc/csf/csf.dshield /etc/csf/csf.tor /etc/csf/csf.bogon
 
@@ -653,7 +655,7 @@ chmod -R 600 /usr/local/csf/profiles
 chmod 600 /var/log/lfd.log*
 
 chmod -v 700 /usr/local/csf/bin/*.pl /usr/local/csf/bin/*.sh /usr/local/csf/bin/*.pm
-chmod -v 700 /etc/csf/*.pl /etc/csf/*.cgi /etc/csf/*.sh /etc/csf/*.php /etc/csf/*.py
+chmod -v 700 /etc/csf/*.pl
 chmod -v 700 /etc/csf/webmin/csf/index.cgi
 chmod -v 644 /etc/cron.d/lfd-cron
 chmod -v 644 /etc/cron.d/csf-cron
@@ -725,17 +727,17 @@ then
     cp -avf lfd.service /usr/lib/systemd/system/
     cp -avf csf.service /usr/lib/systemd/system/
 
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service > /dev/null 2>&1
+    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service > /dev/null 2>&1
 
     systemctl daemon-reload
 
-    systemctl enable csf.service
-    systemctl enable lfd.service
+    systemctl enable csf.service > /dev/null 2>&1
+    systemctl enable lfd.service > /dev/null 2>&1
 
-    systemctl disable firewalld
-    systemctl stop firewalld
-    systemctl mask firewalld
+    systemctl disable firewalld > /dev/null 2>&1
+    systemctl stop firewalld > /dev/null 2>&1
+    systemctl mask firewalld > /dev/null 2>&1
 else
     cp -avf lfd.sh /etc/init.d/lfd
     cp -avf csf.sh /etc/init.d/csf
@@ -992,7 +994,7 @@ if [ -f "$CSF_CONF" ]; then
 	else
 	print "    "
 	print "    The setting ${yellowd}TESTING${greym} is currently ${redl}disabled${greym}; which is the"
-	print "    correct setting if you plan to start using your new firewall."
+	print "    correct setting if you plan to start using your firewall."
 	fi
 else
 	print "    "
@@ -1007,4 +1009,3 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
-}

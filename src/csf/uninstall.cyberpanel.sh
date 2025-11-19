@@ -9,7 +9,7 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service >/dev/null 2>&1
     systemctl stop rt-gsb-poller.service >/dev/null 2>&1
-    # [NEW] Stop bpfilterd if it's running
+    # Stop bpfilterd if it's running
     systemctl stop bpfilterd.service >/dev/null 2>&1
 else
     # Fallback for non-systemd
@@ -43,7 +43,6 @@ iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/nul
 echo "Restoring kernel defaults..."
 # Remove our tuning files
 rm -fv /etc/sysctl.d/99-csf-tuning.conf
-# [FIX] Added RT conntrack file to removal list
 rm -fv /etc/sysctl.d/98-revolutionary-tech-conntrack.conf
 # Reload sysctl to restore defaults (or OS-provided values)
 sysctl --system >/dev/null 2>&1
@@ -68,7 +67,6 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
     systemctl disable rt-gsb-poller.service >/dev/null 2>&1
-    # [NEW] Disable bpfilterd service
     systemctl disable bpfilterd.service >/dev/null 2>&1
 
     rm -fv /usr/lib/systemd/system/csf.service
@@ -76,7 +74,6 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     rm -fv /etc/systemd/system/modsec3-converter.service
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
     rm -fv /etc/systemd/system/rt-gsb-poller.service
-    # [NEW] Remove bpfilterd service file
     rm -fv /etc/systemd/system/bpfilterd.service
     
     systemctl daemon-reload
@@ -130,24 +127,30 @@ rm -Rfv /usr/local/CyberCP/configservercsf
 rm -fv /home/cyberpanel/plugins/configservercsf
 rm -Rfv /usr/local/CyberCP/public/static/configservercsf
 
-sed -i "/configservercsf/d" /usr/local/CyberCP/CyberCP/settings.py
-sed -i "/configservercsf/d" /usr/local/CyberCP/CyberCP/urls.py
-if [ ! -e /etc/cxs/cxs.pl ]; then
+# Patch CyberPanel configuration files to remove references
+if [ -f /usr/local/CyberCP/CyberCP/settings.py ]; then
+    sed -i "/configservercsf/d" /usr/local/CyberCP/CyberCP/settings.py
+fi
+if [ -f /usr/local/CyberCP/CyberCP/urls.py ]; then
+    sed -i "/configservercsf/d" /usr/local/CyberCP/CyberCP/urls.py
+fi
+# Remove menu item (only if CXS is not installed to avoid breaking shared menu logic)
+if [ ! -e /etc/cxs/cxs.pl ] && [ -f /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html ]; then
     sed -i "/configserver/d" /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
 fi
 
-service lscpd restart
+# Restart LiteSpeed to apply changes
+service lscpd restart >/dev/null 2>&1
 
-# [NEW] Remove BPF/XDP Binaries & Rules
+# Remove BPF/XDP Binaries & Rules
 echo "Removing BPF/XDP Binaries, Rules, and Build Files..."
 rm -fv /usr/local/sbin/iptables-bpf
 rm -fv /usr/local/sbin/bpfilterd
 rm -fv /usr/local/csf/bin/csf-bpf-loader.sh
 rm -Rfv /etc/csf/bpf.d
 rm -Rfv /usr/src/rt-build
-# [END NEW]
 
-# [UPDATED] Remove Auto-Tuner & Hardware Acceleration files
+# Remove Auto-Tuner & Hardware Acceleration files
 echo "Removing Auto-Tuner and Acceleration tools..."
 rm -fv /usr/local/sbin/csf-autotune.sh
 rm -fv /usr/local/sbin/csf-firmware-check.sh
@@ -160,17 +163,15 @@ rm -fv /usr/local/sbin/rt-google-ip-updater.pl
 rm -fv /etc/cron.hourly/rt-block-reporter
 rm -fv /var/lib/csf/rt-reporter.state
 
-# [NEW] Remove ModSec3 Bridge files
+# Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
 rm -fv /var/log/modsec_compat.log
 
-# [NEW] Clean up Google IP entries from csf.allow
+# Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."
 if [ -f /etc/csf/csf.allow ]; then
-    # This sed command removes the entire block between the markers
     sed -i '/^# BEGIN Revolutionary Technology Google IPs/,/^# END Revolutionary Technology Google IPs/d' /etc/csf/csf.allow > /dev/null 2>&1
-    # This removes any static ASN entries
     sed -i '/# Google ASN/d' /etc/csf/csf.allow > /dev/null 2>&1
 fi
 

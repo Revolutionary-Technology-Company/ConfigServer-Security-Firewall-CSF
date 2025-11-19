@@ -43,7 +43,7 @@ iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/nul
 echo "Restoring kernel defaults..."
 # Remove our tuning files
 rm -fv /etc/sysctl.d/99-csf-tuning.conf
-# [FIX] Added RT conntrack file to removal list
+# [NEW] Remove RT conntrack file
 rm -fv /etc/sysctl.d/98-revolutionary-tech-conntrack.conf
 # Reload sysctl to restore defaults (or OS-provided values)
 sysctl --system >/dev/null 2>&1
@@ -121,6 +121,19 @@ rm -fv /etc/cron.d/rt-google-ip-updater
 rm -fv /etc/logrotate.d/lfd
 rm -fv /usr/local/man/man1/csf.man.1
 
+# [Interworx-specific] Remove plugin and UI
+echo "Removing Interworx UI and plugin..."
+/usr/local/interworx/bin/nodeworx.pex -u --controller Plugins --action edit --plugin_name configservercsf --status 0 -n
+rm -Rfv /usr/local/interworx/plugins/configservercsf /usr/local/interworx/html/configserver
+
+# [Interworx-specific] Restore original Interworx firewall (APF)
+echo "Restoring Interworx APF firewall..."
+chattr -ia /etc/apf/apf
+if [ -e "/etc/apf/apf.old" ]; then
+    cp -avf /etc/apf/apf.old /etc/apf/apf
+    chmod 750 /etc/apf/apf
+fi
+
 # [NEW] Remove BPF/XDP Binaries & Rules
 echo "Removing BPF/XDP Binaries, Rules, and Build Files..."
 rm -fv /usr/local/sbin/iptables-bpf
@@ -147,19 +160,6 @@ rm -fv /var/lib/csf/rt-reporter.state
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
 rm -fv /var/log/modsec_compat.log
-
-# [Interworx-specific] Remove plugin and UI
-echo "Removing Interworx UI and plugin..."
-/usr/local/interworx/bin/nodeworx.pex -u --controller Plugins --action edit --plugin_name configservercsf --status 0 -n
-rm -Rfv /usr/local/interworx/plugins/configservercsf /usr/local/interworx/html/configserver
-
-# [Interworx-specific] Restore original Interworx firewall (APF)
-echo "Restoring Interworx APF firewall..."
-chattr -ia /etc/apf/apf
-if [ -e "/etc/apf/apf.old" ]; then
-    cp -avf /etc/apf/apf.old /etc/apf/apf
-    chmod 750 /etc/apf/apf
-fi
 
 # Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."

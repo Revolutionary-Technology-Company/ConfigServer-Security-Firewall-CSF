@@ -604,13 +604,13 @@ ln -svf /usr/local/csf/lib/webmin /etc/csf/
 if [ ! -e "/etc/csf/alerts" ]; then
     ln -svf /usr/local/csf/tpl /etc/csf/alerts
 fi
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd > /dev/null 2>&1
+chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf > /dev/null 2>&1
 
-mkdir webmin/csf/images
-mkdir ui/images
-mkdir da/images
-mkdir interworx/images
+mkdir -p webmin/csf/images
+mkdir -p ui/images
+mkdir -p da/images
+mkdir -p interworx/images
 
 cp -avf csf/* webmin/csf/images/
 cp -avf csf/* ui/images/
@@ -618,7 +618,8 @@ cp -avf csf/* da/images/
 cp -avf csf/* interworx/images/
 
 cp -avf messenger/*.php /etc/csf/messenger/
-cp -avf uninstall.cwp.sh /usr/local/csf/bin/uninstall.sh
+cp -avf csf/csf_small.png /usr/local/cpanel/whostmgr/docroot/addon_plugins/
+cp -avf uninstall.sh /usr/local/csf/bin/
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
@@ -999,7 +1000,7 @@ done
 TESTING_VALUE=$(grep '^[[:space:]]*TESTING[[:space:]]*=' "$CSF_CONF" | awk -F= '{gsub(/ /,"",$2); print $2}' | tr -d '"')
 
 prinp "${APP_NAME_SHORT:-CSF} > Installation Complete" \
-       "Your installation is. Read important notes below."
+       "Your installation is complete. Read important notes below."
 
 print "    For more information on how to use ${APP_NAME_SHORT:-CSF}; visit"
 print "        ${yellowd}${APP_LINK_DOCS:-https://docs.configserver.shop}"
@@ -1012,7 +1013,7 @@ if [ -f "$CSF_CONF" ]; then
 	print "    The setting ${yellowd}TESTING${greym} is currently ${greenl}enabled${greym}; you should open your config and"
 	print "    disable this setting before to you begin using your new firewall."
 	print "    To disable this setting, open ${yellowd}${CSF_CONF}${greym} and set the following:"
-	print "        ${fuchsial}TESTING = ${white}\"${bluel}0${white}\\\"${greym}\""
+	print "        ${fuchsial}TESTING = ${white}\"${bluel}0${white}\"${greym}"
 	else
 	print "    "
 	print "    The setting ${yellowd}TESTING${greym} is currently ${redl}disabled${greym}; which is the"
@@ -1031,4 +1032,3 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
-}

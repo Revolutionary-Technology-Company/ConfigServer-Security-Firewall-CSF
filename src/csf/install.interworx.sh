@@ -12,7 +12,7 @@
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.05.2025
+#   @updated            11.18.2025
 #   
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -22,8 +22,10 @@
 #   This program is distributed in the hope that it will be useful, but
 #   WITHOUT ANY WARRANTY; without even the implied warranty of
 #   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-Normal install          sh install.sh
-#               Dryrun install          sh install.sh --dryrun
+#   General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, see <https://www.gnu.org/licenses>.
 # #
 
 umask 0177
@@ -92,6 +94,7 @@ else
     echo "...Perl modules OK"
     echo
 fi
+
 #
 # --- [Revolutionary Tech] Install Build Dependencies (bpfilter, eBPF, Tarpit) & Sign Modules ---
 #
@@ -253,6 +256,120 @@ if [ -d "bpf.d" ]; then
 else
     warn "    > 'bpf.d' directory not found in source. Skipping rules copy."
 fi
+
+# --- Compile the Drop/Echo Rule ---
+print "    > Compiling BPF Drop/Echo rule..."
+
+cat << 'EOF' > /etc/csf/bpf.d/csf_xdp_drop.c
+// 
+// CSF XDP Drop Actions
+// Implements high-performance packet handling for common firewall targets.
+//
+// Targets:
+//   DROP   -> XDP_DROP (Silent, immediate drop)
+//   ECHO   -> XDP_TX   (Reflect packet back to sender)
+//   REJECT -> XDP_TX   (Reflects, effectively rejecting without RST generation complexity)
+//
+
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+
+// Define a map to store blocked IPs and their action code
+// Key: IP Address (u32), Value: Action Code (u32)
+// Action Codes:
+//   0 = XDP_DROP (DROP, TARPIT, DELUDE - simplify to drop for speed)
+//   1 = XDP_TX   (ECHO, REJECT - bounce back)
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 100000);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_drop_map SEC(".maps");
+
+// Helper to swap MAC addresses for XDP_TX (Echo)
+static inline void swap_src_dst_mac(void *data) {
+    struct ethhdr *eth = data;
+    unsigned char tmp[ETH_ALEN];
+    __builtin_memcpy(tmp, eth->h_source, ETH_ALEN);
+    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(eth->h_dest, tmp, ETH_ALEN);
+}
+
+// Helper to swap IP addresses for XDP_TX
+static inline void swap_src_dst_ipv4(struct iphdr *ip) {
+    __u32 tmp = ip->saddr;
+    ip->saddr = ip->daddr;
+    ip->daddr = tmp;
+}
+
+SEC("xdp")
+int csf_firewall_prog(struct xdp_md *ctx) {
+    void *data_end = (void *)(long)ctx->data_end;
+    void *data = (void *)(long)ctx->data;
+    struct ethhdr *eth = data;
+    struct iphdr *ip;
+
+    // sanity check
+    if ((void *)(eth + 1) > data_end)
+        return XDP_PASS;
+
+    // Only handle IPv4 for now
+    if (eth->h_proto != bpf_htons(ETH_P_IP))
+        return XDP_PASS;
+
+    ip = (void *)(eth + 1);
+    if ((void *)(ip + 1) > data_end)
+        return XDP_PASS;
+
+    // Lookup Source IP in our map
+    __u32 src_ip = ip->saddr;
+    __u32 *action = bpf_map_lookup_elem(&csf_drop_map, &src_ip);
+
+    if (action) {
+        // Found in blocklist! Check action code.
+        
+        // Action 0: DROP (Standard Drop, Tarpit, etc.)
+        if (*action == 0) {
+            return XDP_DROP;
+        }
+
+        // Action 1: ECHO / REJECT (Reflect packet)
+        if (*action == 1) {
+            // We need to modify the packet to send it back
+            swap_src_dst_mac(data);
+            swap_src_dst_ipv4(ip);
+            return XDP_TX; 
+        }
+        
+        // Default fallback if unknown action code
+        return XDP_DROP; 
+    }
+
+    return XDP_PASS;
+}
+
+char _license[] SEC("license") = "GPL";
+EOF
+
+if command -v clang >/dev/null 2>&1; then
+    print "    > Compiling csf_xdp_drop.c..."
+    # Using -g for BTF if available, otherwise standard BPF target
+    clang -O2 -g -target bpf -c /etc/csf/bpf.d/csf_xdp_drop.c -o /etc/csf/bpf.d/csf_xdp_drop.o >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        ok "    > BPF Drop/Echo rule compiled successfully: /etc/csf/bpf.d/csf_xdp_drop.o"
+        chmod 644 /etc/csf/bpf.d/csf_xdp_drop.o
+    else
+        error "    > Failed to compile BPF Drop/Echo rule."
+    fi
+else
+    warn "    > clang not found. Cannot compile BPF rules."
+fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
@@ -286,6 +403,7 @@ fi
 if [ ! -d /usr/local/csf/tpl ]; then
 	mkdir -v -p -m 0600 /usr/local/csf/tpl
 fi
+
 if [ ! -e "/etc/csf/csf.allow" ]; then
 	cp -avf csf.interworx.allow /etc/csf/csf.allow
 fi
@@ -371,6 +489,7 @@ fi
 if [ ! -e "/etc/csf/csf.cloudflare" ]; then
 	cp -avf csf.cloudflare /etc/csf/.
 fi
+
 if [ ! -e "/usr/local/csf/tpl/alert.txt" ]; then
 	cp -avf alert.txt /usr/local/csf/tpl/.
 fi
@@ -680,130 +799,6 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.interworx.pl
 ./auto.interworx.pl $OLDVERSION
 
-if test \`cat /proc/1/comm\` = "systemd"
-then
-    if [ -e /etc/init.d/lfd ]; then
-        if [ -f /etc/redhat-release ]; then
-            /sbin/chkconfig csf off
-            /sbin/chkconfig lfd off
-            /sbin/chkconfig csf --del
-            /sbin/chkconfig lfd --del
-        elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-            update-rc.d -f lfd remove
-            update-rc.d -f csf remove
-        elif [ -f /etc/gentoo-release ]; then
-            rc-update del lfd default
-            rc-update del csf default
-        elif [ -f /etc/slackware-version ]; then
-            rm -vf /etc/rc.d/rc3.d/S80csf
-            rm -vf /etc/rc.d/rc4.d/S80csf
-            rm -vf /etc/rc.d/rc5.d/S80csf
-            rm -vf /etc/rc.d/rc3.d/S85lfd
-            rm -vf /etc/rc.d/rc4.d/S85lfd
-            rm -vf /etc/rc.d/rc5.d/S85lfd
-        else
-            /sbin/chkconfig csf off
-            /sbin/chkconfig lfd off
-            /sbin/chkconfig csf --del
-            /sbin/chkconfig lfd --del
-        fi
-        rm -fv /etc/init.d/csf
-        rm -fv /etc/init.d/lfd
-    fi
-
-    mkdir -p /etc/systemd/system/
-    mkdir -p /usr/lib/systemd/system/
-    cp -avf lfd.service /usr/lib/systemd/system/
-    cp -avf csf.service /usr/lib/systemd/system/
-
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service
-
-    systemctl daemon-reload
-
-    systemctl enable csf.service
-    systemctl enable lfd.service
-
-    systemctl disable firewalld
-    systemctl stop firewalld
-    systemctl mask firewalld
-else
-    cp -avf lfd.sh /etc/init.d/lfd
-    cp -avf csf.sh /etc/init.d/csf
-    chmod -v 755 /etc/init.d/lfd
-    chmod -v 755 /etc/init.d/csf
-
-    if [ -f /etc/redhat-release ]; then
-        /sbin/chkconfig lfd on
-        /sbin/chkconfig csf on
-    elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-        update-rc.d -f lfd remove
-        update-rc.d -f csf remove
-        update-rc.d lfd defaults 80 20
-        update-rc.d csf defaults 20 80
-    elif [ -f /etc/gentoo-release ]; then
-        rc-update add lfd default
-        rc-update add csf default
-    elif [ -f /etc/slackware-version ]; then
-        ln -svf /etc/init.d/csf /etc/rc.d/rc3.d/S80csf
-        ln -svf /etc/init.d/csf /etc/rc.d/rc4.d/S80csf
-        ln -svf /etc/init.d/csf /etc/rc.d/rc5.d/S80csf
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc3.d/S85lfd
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc4.d/S85lfd
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc5.d/S85lfd
-    else
-        /sbin/chkconfig lfd on
-        /sbin/chkconfig csf on
-    fi
-fi
-
-# #
-#	Step > Permissions
-# #
-
-prinp "${APP_NAME_SHORT:-CSF} > File Permissions" \
-       "This step ensures that your ${APP_NAME_SHORT:-CSF} files contain the correct folder and file permissions."
-
-# #
-#   List of directories to set ownership
-# #
-
-dirs="/etc/csf /var/lib/csf /usr/local/csf"
-
-# #
-#   List of individual files to set ownership
-# #
-
-files="/usr/sbin/csf /usr/sbin/lfd /etc/logrotate.d/lfd /etc/cron.d/csf-cron /etc/cron.d/lfd-cron /usr/local/man/man1/csf.1 /usr/lib/systemd/system/lfd.service /usr/lib/systemd/system/csf.service /etc/init.d/lfd /etc/init.d/csf"
-
-# #
-#   Set ownership for directories
-# #
-
-CSF_CHOWN_GENERAL="root:root"
-
-for dir in $dirs; do
-    if [ -d "$dir" ]; then
-        chown -Rf "${CSF_CHOWN_GENERAL}" "$dir"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for folder ${bluel}${dir}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; folder does not exist: ${yellowl}${dir}${greym}"
-    fi
-done
-
-# #
-#   Set ownership for individual files
-# #
-
-for file in $files; do
-    if [ -e "$file" ]; then
-        chown -f "${CSF_CHOWN_GENERAL}" "$file"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for file ${bluel}${file}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; file does not exist: ${yellowl}${file}${greym}"
-    fi
-done
-
 mkdir -v -m 0600 /usr/local/interworx/plugins/configservercsf /usr/local/interworx/html/configserver
 chmod -v 0711 /usr/local/interworx/html/configserver
 cp -avf interworx/* /usr/local/interworx/plugins/configservercsf
@@ -1022,4 +1017,3 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
-}
