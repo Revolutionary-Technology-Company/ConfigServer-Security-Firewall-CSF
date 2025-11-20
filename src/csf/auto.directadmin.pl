@@ -318,16 +318,20 @@ if ($config{TESTING}) {
 		&loadcsfconfig;
 	}
 
-	open (FH, "<", "/proc/sys/kernel/osrelease");
-	flock (FH, LOCK_SH);
+open (FH, "<", "/proc/sys/kernel/osrelease");
+	flock (IN, LOCK_SH);
 	my @data = <FH>;
 	close (FH);
 	chomp @data;
+    
+    # [REVOLUTIONARY TECH UPDATE]
+    # Logic updated to support Kernel 4, 5, 6+
 	if ($data[0] =~ /^(\d+)\.(\d+)\.(\d+)/) {
 		my $maj = $1;
 		my $mid = $2;
 		my $min = $3;
-		if ($maj == 3 and $mid > 6) {
+        # Enable Conntrack if Kernel is 3.7+ OR Major version is > 3
+		if ( ($maj == 3 and $mid > 6) or ($maj > 3) ) {
 			open (IN, "<", "/etc/csf/csf.conf") or die $!;
 			flock (IN, LOCK_SH) or die $!;
 			my @config = <IN>;
@@ -338,7 +342,7 @@ if ($config{TESTING}) {
 			foreach my $line (@config) {
 				if ($line =~ /^USE_CONNTRACK =/) {
 					print OUT "USE_CONNTRACK = \"1\"\n";
-					print "\n*** USE_CONNTRACK Enabled\n\n";
+					print "\n*** USE_CONNTRACK Enabled (Modern Kernel Detected)\n\n";
 				} else {
 					print OUT $line."\n";
 				}
@@ -504,7 +508,12 @@ if (&checkversion("14.03") and !-e "/var/lib/csf/auto1403") {
 }
 
 if ($config{TESTING}) {
-	my @netstat = `netstat -lpn`;
+    # [REVOLUTIONARY TECH UPDATE]
+    # Added fallback to 'ss' because 'netstat' is deprecated/missing on modern minimal distros
+	my @netstat = `netstat -lpn 2>/dev/null`;
+    if (!@netstat) {
+        @netstat = `ss -lpn`;
+    }
 	chomp @netstat;
 	my @tcpports;
 	my @udpports;

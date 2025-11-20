@@ -414,6 +414,13 @@ else
 fi
 # ==============================================================================
 
+# ==============================================================================
+print "    Installing Revolutionary Technology pre-install scripts..."
+mkdir -p -m 0755 /usr/local/include/csf/pre.d/
+cp -avf stressengine.sh /usr/local/include/csf/pre.d/
+chmod -v 700 /usr/local/include/csf/pre.d/*.sh
+# ==============================================================================
+
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
 fi

@@ -23,6 +23,13 @@ echo "Removing Hardware-Accelerated rules (Stress Engine & GSB)..."
 IPTABLES=$(which iptables || echo "/sbin/iptables")
 IPSET=$(which ipset || echo "/usr/sbin/ipset")
 
+# [NEW] Remove NFTables Tables (RT Emergency & RT Security)
+if command -v nft >/dev/null 2>&1; then
+    echo "Flushing Revolutionary Technology NFTables..."
+    nft delete table inet rt_emergency >/dev/null 2>&1
+    nft delete table inet rt_security >/dev/null 2>&1
+fi
+
 # Flush and remove Google Safe Sites ipset
 if $IPSET list -n "rt_google_safesites" &>/dev/null; then
     echo "Removing Google Safe Sites firewall rules..."
