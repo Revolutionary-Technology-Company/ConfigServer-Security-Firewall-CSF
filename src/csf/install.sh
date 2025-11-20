@@ -536,8 +536,8 @@ User=root
 WantedBy=multi-user.target
 EOF
             systemctl daemon-reload
-            systemctl enable "$GSB_SERVICE_FILE" >/dev/null 2>&1
-            systemctl start "$GSB_SERVICE_FILE"
+            systemctl enable rt-gsb-poller.service >/dev/null 2>&1
+			systemctl start rt-gsb-poller.service
         fi
     fi
 

@@ -84,7 +84,7 @@ if [ "$MODE" == "NFTABLES" ]; then
         }
 
         chain rt_synproxy {
-            synproxy tcp mss 1460 wscale 80 sack yes timestamp yes accept
+            synproxy mss 1460 wscale 80 sack yes timestamp yes accept
         }
 
         chain input {
@@ -104,8 +104,10 @@ if [ "$MODE" == "NFTABLES" ]; then
             tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop
             
             # Signatures
-            @th,272,16 0x40 drop
-            @nh,96,4 & 0x000F0000 == 0x50000 drop
+            #@th,272,16 0x40 drop
+            #@nh,96,4 & 0x000F0000 == 0x50000 drop
+			ip version 4 ip ihl != 5 drop
+			meta l4proto { tcp, udp } payload @th, 272, 16 u16 == 0x40 drop
 
             # SYN Proxy
             tcp dport { 80, 443 } tcp flags & (fin|syn|rst|ack) == syn jump rt_synproxy
