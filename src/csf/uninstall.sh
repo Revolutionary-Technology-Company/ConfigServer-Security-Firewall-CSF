@@ -9,7 +9,7 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service >/dev/null 2>&1
     systemctl stop rt-gsb-poller.service >/dev/null 2>&1
-    # [NEW] Stop bpfilterd if it's running
+    # Stop bpfilterd if it's running
     systemctl stop bpfilterd.service >/dev/null 2>&1
 else
     # Fallback for non-systemd
@@ -36,6 +36,17 @@ $IPTABLES -t filter -F RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 $IPTABLES -D INPUT -j RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 $IPTABLES -t filter -X RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 
+# [NEW] Remove NFTables Tables (RT Emergency & RT Security)
+if command -v nft >/dev/null 2>&1; then
+    echo "Flushing Revolutionary Technology NFTables..."
+    # Remove the Triage table from install
+    nft delete table inet rt_emergency >/dev/null 2>&1
+    # Remove the Stress Engine table
+    nft delete table inet rt_security >/dev/null 2>&1
+    # Remove GSB Poller table
+    nft delete table inet rt_gsb >/dev/null 2>&1
+fi
+
 echo "Removing custom SYN flood rules..."
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP >/dev/null 2>&1
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/null 2>&1
@@ -43,7 +54,6 @@ iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/nul
 echo "Restoring kernel defaults..."
 # Remove our tuning files
 rm -fv /etc/sysctl.d/99-csf-tuning.conf
-# [NEW] Remove RT conntrack file
 rm -fv /etc/sysctl.d/98-revolutionary-tech-conntrack.conf
 # Reload sysctl to restore defaults (or OS-provided values)
 sysctl --system >/dev/null 2>&1
@@ -68,7 +78,6 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
     systemctl disable rt-gsb-poller.service >/dev/null 2>&1
-    # [NEW] Disable bpfilterd service
     systemctl disable bpfilterd.service >/dev/null 2>&1
 
     rm -fv /usr/lib/systemd/system/csf.service
@@ -76,7 +85,6 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     rm -fv /etc/systemd/system/modsec3-converter.service
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
     rm -fv /etc/systemd/system/rt-gsb-poller.service
-    # [NEW] Remove bpfilterd service file
     rm -fv /etc/systemd/system/bpfilterd.service
     
     systemctl daemon-reload
@@ -147,16 +155,15 @@ if [ -f /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver ]; then
     /bin/touch /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver
 fi
 
-# [NEW] Remove BPF/XDP Binaries & Rules
+# Remove BPF/XDP Binaries & Rules
 echo "Removing BPF/XDP Binaries, Rules, and Build Files..."
 rm -fv /usr/local/sbin/iptables-bpf
 rm -fv /usr/local/sbin/bpfilterd
 rm -fv /usr/local/csf/bin/csf-bpf-loader.sh
 rm -Rfv /etc/csf/bpf.d
 rm -Rfv /usr/src/rt-build
-# [END NEW]
 
-# [UPDATED] Remove Auto-Tuner & Hardware Acceleration files
+# Remove Auto-Tuner & Hardware Acceleration files
 echo "Removing Auto-Tuner and Acceleration tools..."
 rm -fv /usr/local/sbin/csf-autotune.sh
 rm -fv /usr/local/sbin/csf-firmware-check.sh
@@ -173,15 +180,6 @@ rm -fv /var/lib/csf/rt-reporter.state
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
 rm -fv /var/log/modsec_compat.log
-
-# [NEW] Remove NFTables Tables (RT Emergency & RT Security)
-if command -v nft >/dev/null 2>&1; then
-    echo "Flushing Revolutionary Technology NFTables..."
-    # Remove the Triage table from install
-    nft delete table inet rt_emergency >/dev/null 2>&1
-    # Remove the Stress Engine table
-    nft delete table inet rt_security >/dev/null 2>&1
-fi
 
 # Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."
@@ -206,4 +204,4 @@ rm -Rfv /usr/local/include/csf
 
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."
-echo "...Good luck!"
+echo "Good luck..."
