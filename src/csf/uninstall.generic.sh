@@ -36,6 +36,16 @@ $IPTABLES -t filter -F RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 $IPTABLES -D INPUT -j RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 $IPTABLES -t filter -X RT_STRESS_ENGINE_FILTER > /dev/null 2>&1
 
+# [NEW] Remove NFTables Tables (RT Emergency & RT Security)
+# This was missing in the generic uninstaller!
+if command -v nft >/dev/null 2>&1; then
+    echo "Flushing Revolutionary Technology NFTables..."
+    # Remove the Triage table from install
+    nft delete table inet rt_emergency >/dev/null 2>&1
+    # Remove the Stress Engine table
+    nft delete table inet rt_security >/dev/null 2>&1
+fi
+
 echo "Removing custom SYN flood rules..."
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP >/dev/null 2>&1
 iptables -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP >/dev/null 2>&1

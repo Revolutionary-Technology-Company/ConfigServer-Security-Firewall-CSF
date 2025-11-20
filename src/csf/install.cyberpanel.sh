@@ -379,49 +379,70 @@ fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
-# --- [Revolutionary Tech] RT Control (Immediate Triage) ---
-print "    Providing immediate DDoS protection from Revolutionary Technology..."
+# ==============================================================================
+# [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE
+# ==============================================================================
+print "    [RT-Control] Engaging Immediate DDoS Protection..."
 
-# 1. Kernel Hardening (Universal)
+# 1. Kernel Hardening
 sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
 echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
 sysctl -p > /dev/null 2>&1
 
-# 2. Detect Firewall Backend & Apply Emergency Rules
+# 2. Detect Firewall Backend
+# Check if user specifically wants NFT or if we should fallback to iptables
+USE_NFT="0"
 if command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then
-    print "    > Applying immediate NFTables defense..."
-    
-    # Create a high-priority table that runs BEFORE everything else
-    nft add table inet rt_emergency 2>/dev/null
-    nft add chain inet rt_emergency input { type filter hook input priority -1000\; } 2>/dev/null
-    
-    # Equivalent to: iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
-    # Checks IP header length (IHL) is 5 (standard header, no options)
-    # AND ensures TCP header length is normal. 
-    # nft syntax: @nh,96,4 & 0xF == 5
-    nft add rule inet rt_emergency input ip version 4 @nh,0,4 5 drop 2>/dev/null
-
-    # Equivalent to: iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
-    # Checks for specific bogus TCP options at offset 34 (common in some botnet floods)
-    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
-
-else
-    print "    > Applying immediate IPtables defense..."
-    # Your classic money-making rules
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+    # Check if user prefers iptables legacy via args or config, otherwise default to NFT if available
+    # For now, we auto-detect. If nft works, we use it for the Triage block.
+    USE_NFT="1"
 fi
 
-# 3. Continue with Full Installation
-print "    Installing Revolutionary Technology pre-install scripts..."
-mkdir -p -m 0755 /usr/local/include/csf/pre.d/
-cp -avf stressengine.sh /usr/local/include/csf/pre.d/
-chmod -v 700 /usr/local/include/csf/pre.d/*.sh
+if [ "$USE_NFT" = "1" ]; then
+    print "    > Detected NFTables. Applying STRICT native filters..."
 
-# Execute Stress Engine immediately for full protection
-print "    > Engaging Stress Engine..."
-sh /usr/local/include/csf/pre.d/stressengine.sh
-# --- [Revolutionary Tech] End RT Control ---
+    # A. Create Table & Chain
+    # Priority -1000 places this BEFORE connection tracking (Raw equivalent)
+    nft add table inet rt_emergency 2>/dev/null
+    nft add chain inet rt_emergency input { type filter hook input priority -1000\; policy accept\; } 2>/dev/null
+
+    # B. Create Dynamic Blacklist Set (The "Penalty Box")
+    # Types: IPv4 address. Flags: Dynamic (auto-update), Timeout (auto-expire).
+    nft add set inet rt_emergency flooders { type ipv4_addr\; flags dynamic, timeout\; timeout 10m\; } 2>/dev/null
+
+    # C. Drop Malformed Headers (The "IHL" Check)
+    # Legacy u32: "0xc&0x000F0000>>16=0x5"
+    # NFT Native: Check if IP Header Length is NOT 5 (standard).
+    nft add rule inet rt_emergency input ip version 4 ip ihl != 5 drop 2>/dev/null
+
+    # D. Drop Bogus TCP Options (Botnet Signature)
+    # Legacy u32: "0x22&0xFFFF=0x40" (Offset 34 bytes, Length 2 bytes, Value 0x40)
+    # NFT Native: @th (Transport Header), Offset 272 bits (34*8), Length 16 bits.
+    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
+
+    # E. Enforce Dynamic Blacklist
+    # If source IP is in 'flooders', drop immediately.
+    nft add rule inet rt_emergency input ip saddr @flooders drop 2>/dev/null
+
+    # F. Rate Limit & Punishment
+    # If SYN packets > 50/sec, add IP to 'flooders' set for 10 minutes.
+    # The 'burst' allows a small initial spike (100 packets) before clamping down.
+    nft add rule inet rt_emergency input tcp flags syn limit rate 50/second burst 100 packets add @flooders { ip saddr } 2>/dev/null
+
+    print "    > [NFT] RT Triage rules active."
+
+else
+    print "    > Detected IPtables. Applying legacy signatures..."
+    
+    # 1. Malformed Headers
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
+    
+    # 2. Bogus TCP Options
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+    
+    print "    > [IPtables] RT Triage rules active."
+fi
+# ==============================================================================
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
@@ -1385,6 +1406,10 @@ for KEY in SYSLOG_LOG IPTABLES_LOG; do
 		ok "    Appending ${greenl}${CSF_CONF}${greym} setting ${fuchsial}${KEY}=${white}\"${bluel}${SYSLOG_PATH}${white}\"${greym}"
     fi
 done
+
+# Execute Stress Engine immediately
+print "    > Engaging Stress Engine..."
+sh /usr/local/include/csf/pre.d/stressengine.sh
 
 # #
 #	Check current value of

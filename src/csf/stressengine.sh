@@ -88,7 +88,9 @@ if [ "$MODE" == "NFTABLES" ]; then
         }
 
         chain input {
-            type filter hook input priority -10; policy accept;
+		# Priority -400 places us BEFORE Connection Tracking (Raw Table equivalent).
+		# This is crucial for a "Stress Engine" to prevent state-table exhaustion.
+		type filter hook input priority -400; policy accept;
 
             ct state invalid drop
             ct state established, related accept

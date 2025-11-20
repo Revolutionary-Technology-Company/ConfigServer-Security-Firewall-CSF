@@ -174,6 +174,15 @@ echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
 rm -fv /var/log/modsec_compat.log
 
+# [NEW] Remove NFTables Tables (RT Emergency & RT Security)
+if command -v nft >/dev/null 2>&1; then
+    echo "Flushing Revolutionary Technology NFTables..."
+    # Remove the Triage table from install
+    nft delete table inet rt_emergency >/dev/null 2>&1
+    # Remove the Stress Engine table
+    nft delete table inet rt_security >/dev/null 2>&1
+fi
+
 # Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."
 if [ -f /etc/csf/csf.allow ]; then

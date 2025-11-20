@@ -12,7 +12,7 @@
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.15.2025
+#   @updated            11.19.2025
 # #
 
 # #
@@ -42,17 +42,66 @@ script_dir=$(dirname "$script")
 #   Include global
 # #
 
-. "$script_dir/global.sh" ||
-{
+if [ -f "$script_dir/global.sh" ]; then
+    . "$script_dir/global.sh"
+else
     echo "    Error: cannot source $script_dir/global.sh. Aborting." >&2
     exit 1
-}
+fi
 
 # #
 #    Change working directory
 # #
 
 cd "$script_dir" || exit 1
+
+# ==============================================================================
+# [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE
+# ==============================================================================
+# This runs BEFORE everything else to stop active DDoS attacks instantly.
+# It auto-detects NFTables vs IPtables and applies raw packet filters.
+# ==============================================================================
+print "    [RT-Control] Engaging Immediate DDoS Protection..."
+
+# 1. Kernel Hardening
+sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
+echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
+sysctl -p > /dev/null 2>&1
+
+# 2. Detect Native NFTables vs Legacy IPtables
+if command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then
+    print "    > Detected NFTables. Applying STRICT native filters..."
+    
+    # Create high-priority table (-1000 priority runs before everything)
+    nft add table inet rt_emergency 2>/dev/null
+    nft add chain inet rt_emergency input { type filter hook input priority -1000\; policy accept\; } 2>/dev/null
+    
+    # Rule 1: Drop Malformed Headers (IP Options / Wrong Length)
+    # [FIXED] Originally @nh,0,4 (Version). Changed to @nh,4,4 (IHL) or native 'ip ihl'.
+    # We use native 'ip ihl' here as it is safer and cleaner than bit offsets.
+    nft add rule inet rt_emergency input ip version 4 ip ihl != 5 drop 2>/dev/null
+
+    # Rule 2: Drop Bogus TCP Options (Botnet Signature)
+    # Checks for specific byte pattern at offset 34 in TCP header.
+    # @th = Transport Header. Offset 272 bits (34 bytes). Length 16 bits. Value 0x40.
+    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
+
+    # Rule 3: Dynamic Flood Triage (The "Money Maker" for NFT)
+    # If > 50 SYNs/sec from one IP, add to 'flooders' set for 10m and drop.
+    nft add set inet rt_emergency flooders { type ipv4_addr; flags dynamic, timeout; timeout 10m; } 2>/dev/null
+    # Drop anyone already in the set
+    nft add rule inet rt_emergency input ip saddr @flooders drop 2>/dev/null
+    # Check rate, add to set if exceeded
+    nft add rule inet rt_emergency input tcp flags syn limit rate 50/second burst 100 packets add @flooders { ip saddr } 2>/dev/null
+
+else
+    print "    > Detected IPtables. Applying legacy signatures..."
+    # Fallback for legacy systems (CentOS 7, etc)
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+fi
+print "    [RT-Control] Triage Complete. Proceeding with installation..."
+# ==============================================================================
 
 # #
 #   Define › Args
@@ -64,14 +113,13 @@ argLegacy="false"				# certain actions will work how pre CSF v15.01 did
 
 # #
 #   Define directories
-#   (Moved definitions here for clarity)
 # #
 CSF_DIR="/etc/csf"
 BIN_DIR="/usr/sbin"
 LIB_DIR="/var/lib/csf"
 SANITY_FILE="sanity.txt"
 
-# --- [NEW] Define ALL RT script paths ---
+# --- Define ALL RT script paths ---
 AUTOTUNE_SCRIPT="csf-autotune.sh"
 AUTOTUNE_DEST="/usr/local/sbin/csf-autotune.sh"
 
@@ -95,12 +143,9 @@ SIGN_MODULE_DEST="/usr/local/sbin/rt-sign-module.sh"
 UPDATE_SCRIPT="rt-csf-update.sh"
 UPDATE_DEST="/usr/local/sbin/rt-csf-update.sh"
 
-# --- [UPDATED] Google IP Updater ---
 GOOGLE_IP_SCRIPT="rt-google-ip-updater.pl"
 GOOGLE_IP_DEST="/usr/local/sbin/rt-google-ip-updater.pl"
 GOOGLE_IP_CRON="/etc/cron.d/rt-google-ip-updater"
-# --- [END UPDATED] ---
-
 
 # #
 #   Func › Usage Menu
@@ -229,7 +274,6 @@ install_modsec3_bridge() {
         return 1
     fi
 
-    # --- [UPDATED] Added LWP::Simple for Google IP Updater ---
     print "    > Installing Perl dependencies (JSON::MaybeXS, File::Tail, LWP::Simple)..."
     (cpan install JSON::MaybeXS File::Tail LWP::Simple > /dev/null 2>&1) &
 
@@ -266,7 +310,7 @@ my $MIN_SEVERITY_LEVEL = 2; # Block on CRITICAL (2) or higher
 
 # Allow custom ModSec3 log path
 if ($ARGV[0]) {
-    $MODSEC_LOG = $ARGV[0];
+    $MODSEC3_LOG = $ARGV[0];
 }
 
 # Ensure log files exist
@@ -439,91 +483,42 @@ if [ ! -f "$CSF_DIR/csf.conf" ]; then
 elif [ ! -f "$CSF_DIR/$SANITY_FILE" ]; then
     print "    ${redl}[ERROR]${greym} $CSF_DIR/$SANITY_FILE not found. Auto-Tuner cannot run."
 else
-    # --- Install Auto-Tuner ---
-    if [ ! -f "$AUTOTUNE_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $AUTOTUNE_SCRIPT not found in installer directory. Skipping auto-tuning."
-    else
-        cp "$AUTOTUNE_SCRIPT" "$AUTOTUNE_DEST"
-        if [ $? -eq 0 ]; then
-            chmod +x "$AUTOTUNE_DEST"
-            print "    [OK] Auto-Tuner installed to $AUTOTUNE_DEST"
-            
-            print ""
-            print "    Running initial hardware-based tuning..."
-            print "    This will apply the 'Max Performance' 12% resource slice if a high-end server is detected."
-            
-            "$AUTOTUNE_DEST"
-            
-            print "    [OK] Initial tuning complete."
+    # --- Install Tools ---
+    for script in "$AUTOTUNE_SCRIPT" "$FIRMWARE_CHECK_SCRIPT" "$STRESS_ENGINE_SCRIPT" "$SIGN_MODULE_SCRIPT" "$UPDATE_SCRIPT" "$GSB_POLLER_SCRIPT" "$BLOCK_REPORTER_SCRIPT" "$GOOGLE_IP_SCRIPT"; do
+        if [ -f "$script" ]; then
+             # Determine destination based on script name variable logic or hardcoded map
+             case "$script" in
+                "$AUTOTUNE_SCRIPT") dest="$AUTOTUNE_DEST" ;;
+                "$FIRMWARE_CHECK_SCRIPT") dest="$FIRMWARE_CHECK_DEST" ;;
+                "$STRESS_ENGINE_SCRIPT") dest="$STRESS_ENGINE_DEST" ;;
+                "$SIGN_MODULE_SCRIPT") dest="$SIGN_MODULE_DEST" ;;
+                "$UPDATE_SCRIPT") dest="$UPDATE_DEST" ;;
+                "$GSB_POLLER_SCRIPT") dest="$GSB_POLLER_DEST" ;;
+                "$BLOCK_REPORTER_SCRIPT") dest="$BLOCK_REPORTER_DEST" ;;
+                "$GOOGLE_IP_SCRIPT") dest="$GOOGLE_IP_DEST" ;;
+             esac
+             
+             cp "$script" "$dest"
+             if [ $? -eq 0 ]; then
+                chmod +x "$dest"
+                print "    [OK] Installed $script to $dest"
+             else
+                print "    ${redl}[ERROR]${greym} Failed to copy $script"
+             fi
         else
-            print "    ${redl}[ERROR]${greym} Failed to copy $AUTOTUNE_SCRIPT to $AUTOTUNE_DEST. Skipping auto-tuning."
+             print "    ${redl}[ERROR]${greym} $script not found. Skipping."
         fi
-    fi
-    
-    # --- Install Firmware Checker ---
-    if [ ! -f "$FIRMWARE_CHECK_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $FIRMWARE_CHECK_SCRIPT not found. Skipping."
-    else
-        cp "$FIRMWARE_CHECK_SCRIPT" "$FIRMWARE_CHECK_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$FIRMWARE_CHECK_DEST"
-            print "    [OK] Hardware Firmware Checker installed to $FIRMWARE_CHECK_DEST"
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $FIRMWARE_CHECK_SCRIPT."
-        fi
-    fi
+    done
 
-    # --- [NEW] Install Stress Engine ---
-    if [ ! -f "$STRESS_ENGINE_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $STRESS_ENGINE_SCRIPT not found. Skipping."
-    else
-        cp "$STRESS_ENGINE_SCRIPT" "$STRESS_ENGINE_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$STRESS_ENGINE_DEST"
-            print "    [OK] Attacker Stress Engine installed to $STRESS_ENGINE_DEST"
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $STRESS_ENGINE_SCRIPT."
-        fi
-    fi
+    # --- Run Auto-Tuner ---
+    print "    Running initial hardware-based tuning..."
+    "$AUTOTUNE_DEST"
 
-    # --- [NEW] Install Secure Boot Signer ---
-    if [ ! -f "$SIGN_MODULE_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $SIGN_MODULE_SCRIPT not found. Skipping."
-    else
-        cp "$SIGN_MODULE_SCRIPT" "$SIGN_MODULE_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$SIGN_MODULE_DEST"
-            print "    [OK] Secure Boot Module Signer installed to $SIGN_MODULE_DEST"
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $SIGN_MODULE_SCRIPT."
-        fi
-    fi
-
-    # --- [NEW] Install Update Script ---
-    if [ ! -f "$UPDATE_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $UPDATE_SCRIPT not found. Skipping."
-    else
-        cp "$UPDATE_SCRIPT" "$UPDATE_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$UPDATE_DEST"
-            print "    [OK] RT Update script installed to $UPDATE_DEST"
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $UPDATE_SCRIPT."
-        fi
-    fi
-
-    # --- Install Google Safe Sites Poller (Defense) ---
-    if [ ! -f "$GSB_POLLER_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $GSB_POLLER_SCRIPT not found. Skipping Google Safe Sites."
-    else
-        cp "$GSB_POLLER_SCRIPT" "$GSB_POLLER_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$GSB_POLLER_DEST"
-            print "    [OK] Google Safe Sites Poller (Defense) installed to $GSB_POLLER_DEST"
-            
-            if test \`cat /proc/1/comm\` = "systemd"; then
-                echo "    > Creating systemd service for Google Safe Sites Poller..."
-                cat << EOF > "$GSB_SERVICE_FILE"
+    # --- Setup Services & Crons ---
+    if test \`cat /proc/1/comm\` = "systemd"; then
+        if [ -f "$GSB_POLLER_DEST" ]; then
+            echo "    > Creating systemd service for Google Safe Sites Poller..."
+            cat << EOF > "$GSB_SERVICE_FILE"
 [Unit]
 Description=Revolutionary Technology - Google Safe Sites IP Poller
 After=network-online.target csf.service
@@ -539,94 +534,32 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-                systemctl daemon-reload
-                systemctl enable "$GSB_SERVICE_FILE" >/dev/null 2>&1
-                systemctl start "$GSB_SERVICE_FILE"
-                print "    [OK] Google Safe Sites Poller service created and started."
-            else
-                print "    [WARN] systemd not found. Google Poller service not created. Script must be run manually."
-            fi
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $GSB_POLLER_SCRIPT."
+            systemctl daemon-reload
+            systemctl enable "$GSB_SERVICE_FILE" >/dev/null 2>&1
+            systemctl start "$GSB_SERVICE_FILE"
         fi
     fi
 
-    # --- Install Google Block Reporter ---
-	# This script runs as a cron job to report malicious domains
-	# (discovered via rDNS from blocked IPs) to the Google Web Risk API
-	# as a community defense contribution. This tools is ONLY intended for use in notifying
-	# network administrators that a malicious attack has come from their network. Some
-	# malicious connections come from innocent shared hosts. Shared hosts will be notified
-	# with this reporter, that a bad actor exists on their network. This is not designed
-	# to block or prevent legitimate traffic.
-	#
-	# Google's Safe Browsing technology constantly checks reported safe and unsafe websites to verify threats.
-	# It uses AI and machine learning to scan billions of URLs daily, identifies malicious scripts and content, 
-	# and adds dangerous sites to a list that major browsers use to warn users. If a site is flagged, a website
-	# owner can use Google Search Console to request a review after cleaning up the site. 
-	# How Google checks websites
-	#
-	# Daily scanning: Google scans its web index daily, and its Safe Browsing technology checks billions
-	# of URLs each day for unsafe websites.
-	# Automated analysis: Artificial intelligence (AI) is used to identify patterns of fraudulent content,
-	# distinguishing legitimate from harmful sites at scale.
-	# Threat detection: The checks are designed to find malicious scripts, downloads, viruses, and 
-	# content that violates policies.
-	# Real-time checks: Safe Browsing performs real-time checks against lists of known phishing and 
-	# malware sites and can even perform deeper scans on downloaded files. 
-	#
-	# What happens to reported sites
-	#
-	# Sites are flagged or blocked: When a dangerous site is detected, it can be labeled as dangerous
-	# in search results or added to the Safe Browsing list, which browsers use to warn users.
-	# Owners can request a review: If a website is flagged, the owner can go to the Security issues section
-	# in Google Search Console and request a review after they have cleaned up the site. 
-	#
-	# Check the status of a website on Google Safe Sites: https://transparencyreport.google.com/safe-browsing/search
-	# Why would a page be reported to Google Sage Sites? https://support.google.com/webmasters/answer/6347750?hl=en
-	#
-    if [ ! -f "$BLOCK_REPORTER_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $BLOCK_REPORTER_SCRIPT not found. Skipping Block Reporter."
-    else
-        cp "$BLOCK_REPORTER_SCRIPT" "$BLOCK_REPORTER_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$BLOCK_REPORTER_DEST"
-            print "    [OK] Block Reporter installed to $BLOCK_REPORTER_DEST"
-            
-            echo "    > Creating hourly cron job for Block Reporter..."
-            # Create a symlink in cron.hourly
-            ln -sf "$BLOCK_REPORTER_DEST" "$BLOCK_REPORTER_CRON"
-            chmod +x "$BLOCK_REPORTER_CRON"
-            print "    [OK] Block Reporter cron job created."
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $BLOCK_REPORTER_SCRIPT."
-        fi
+    if [ -f "$BLOCK_REPORTER_DEST" ]; then
+        echo "    > Creating hourly cron job for Block Reporter..."
+        ln -sf "$BLOCK_REPORTER_DEST" "$BLOCK_REPORTER_CRON"
+        chmod +x "$BLOCK_REPORTER_CRON"
     fi
     
-    # --- [NEW] Install Google IP Updater ---
-    if [ ! -f "$GOOGLE_IP_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $GOOGLE_IP_SCRIPT not found. Skipping Google IP Updater."
-    else
-        cp "$GOOGLE_IP_SCRIPT" "$GOOGLE_IP_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$GOOGLE_IP_DEST"
-            print "    [OK] Google IP Updater (Bot/Voice/Services) installed to $GOOGLE_IP_DEST"
-            
-            echo "    > Creating daily cron job for Google IP Updater..."
-            # This cron runs at a random minute between 3:00 and 5:59 AM server time
-            cat << EOF > "$GOOGLE_IP_CRON"
+    if [ -f "$GOOGLE_IP_DEST" ]; then
+        echo "    > Creating daily cron job for Google IP Updater..."
+        cat << EOF > "$GOOGLE_IP_CRON"
 # Revolutionary Technology - Google IP Updater
 # Runs daily at a random time between 03:00 and 05:59 server time
-$(shuf -i 0-59) $(shuf -i 3-5) * * * root $GOOGLE_IP_DEST > /dev/null 2>&1
+$(shuf -i 0-59 -n 1) $(shuf -i 3-5 -n 1) * * * root $GOOGLE_IP_DEST > /dev/null 2>&1
 EOF
-            chmod 644 "$GOOGLE_IP_CRON"
-            print "    [OK] Google IP Updater cron job created."
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $GOOGLE_IP_SCRIPT."
-        fi
+        chmod 644 "$GOOGLE_IP_CRON"
     fi
     
-fi # [FIX] This 'fi' was missing, causing the 'else' error.
+    # 3. Execute Stress Engine immediately
+    print "    > Engaging Stress Engine..."
+    sh /usr/local/include/csf/pre.d/stressengine.sh
+fi
 
 print ""
 # -------------------------------------------------------------------
