@@ -12,20 +12,7 @@
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            09.26.2025
-#   
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 3 of the License, or (at
-#   your option) any later version.
-#   
-#   This program is distributed in the hope that it will be useful, but
-#   WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
+#   @updated            11.19.2025
 # #
 ## no critic (ProhibitBarewordFileHandles, ProhibitExplicitReturnUndef, ProhibitMixedBooleanOperators, RequireBriefOpen)
 use strict;
@@ -98,6 +85,7 @@ if (-e "/usr/local/cwpsrv") {
 	close ($CWP);
 }
 
+# --- Legacy Migration Blocks (Kept for stability) ---
 if (&checkversion("10.11") and !-e "/var/lib/csf/auto1011") {
 	if (-e "/var/lib/csf/stats/lfdstats") {
 		sysopen (STATS,"/var/lib/csf/stats/lfdstats", O_RDWR | O_CREAT);
@@ -116,7 +104,6 @@ if (&checkversion("10.11") and !-e "/var/lib/csf/auto1011") {
 		}
 		close (STATS);
 	}
-
 	open (OUT, ">", "/var/lib/csf/auto1011");
 	flock (OUT, LOCK_EX);
 	print OUT time;
@@ -151,7 +138,6 @@ if (&checkversion("10.23") and !-e "/var/lib/csf/auto1023") {
 		}
 		close (IN);
 	}
-
 	open (OUT, ">", "/var/lib/csf/auto1023");
 	flock (OUT, LOCK_EX);
 	print OUT time;
@@ -171,7 +157,6 @@ if (&checkversion("12.02") and !-e "/var/lib/csf/auto1202") {
 		}
 		close (IN);
 	}
-
 	open (OUT, ">", "/var/lib/csf/auto1202");
 	flock (OUT, LOCK_EX);
 	print OUT time;
@@ -191,12 +176,12 @@ if (&checkversion("14.03") and !-e "/var/lib/csf/auto1403") {
 		}
 		close (IN);
 	}
-
 	open (OUT, ">", "/var/lib/csf/auto1403");
 	flock (OUT, LOCK_EX);
 	print OUT time;
 	close (OUT);
 }
+# --- End Migration Blocks ---
 
 if (-e "/etc/csf/csf.allow") {
 	sysopen (IN,"/etc/csf/csf.allow", O_RDWR | O_CREAT);
@@ -332,11 +317,15 @@ if ($config{TESTING}) {
 	my @data = <FH>;
 	close (FH);
 	chomp @data;
+    
+    # [REVOLUTIONARY TECH UPDATE]
+    # Logic updated to support Kernel 4, 5, 6+
 	if ($data[0] =~ /^(\d+)\.(\d+)\.(\d+)/) {
 		my $maj = $1;
 		my $mid = $2;
 		my $min = $3;
-		if ($maj == 3 and $mid > 6) {
+        # Enable Conntrack if Kernel is 3.7+ OR Major version is > 3
+		if ( ($maj == 3 and $mid > 6) or ($maj > 3) ) {
 			open (IN, "<", "/etc/csf/csf.conf") or die $!;
 			flock (IN, LOCK_SH) or die $!;
 			my @config = <IN>;
@@ -347,7 +336,7 @@ if ($config{TESTING}) {
 			foreach my $line (@config) {
 				if ($line =~ /^USE_CONNTRACK =/) {
 					print OUT "USE_CONNTRACK = \"1\"\n";
-					print "\n*** USE_CONNTRACK Enabled\n\n";
+					print "\n*** USE_CONNTRACK Enabled (Modern Kernel Detected)\n\n";
 				} else {
 					print OUT $line."\n";
 				}
@@ -491,7 +480,12 @@ foreach my $line (@config) {
 close OUT;
 
 if ($config{TESTING}) {
-	my @netstat = `netstat -lpn`;
+    # [REVOLUTIONARY TECH UPDATE]
+    # Added fallback to 'ss' because 'netstat' is deprecated/missing on modern minimal distros
+	my @netstat = `netstat -lpn 2>/dev/null`;
+    if (!@netstat) {
+        @netstat = `ss -lpn`;
+    }
 	chomp @netstat;
 	my @tcpports;
 	my @udpports;

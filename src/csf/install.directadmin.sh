@@ -13,19 +13,6 @@
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
 #   @updated            11.18.2025
-#   
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 3 of the License, or (at
-#   your option) any later version.
-#   
-#   This program is distributed in the hope that it will be useful, but
-#   WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
 # #
 
 umask 0177
@@ -241,9 +228,127 @@ if [ -d "bpf.d" ]; then
 else
     warn "    > 'bpf.d' directory not found in source. Skipping rules copy."
 fi
-# --- [Revolutionary Tech] End BPF/XDP Block ---
-#
 
+# --- Compile the Drop/Echo Rule ---
+print "    > Compiling BPF Drop/Echo rule..."
+# (This creates the C file and compiles it using clang)
+cat << 'EOF' > /etc/csf/bpf.d/csf_xdp_drop.c
+// 
+// CSF XDP Drop Actions & Zero Trust Whitelisting
+//
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 100000);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_drop_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_udp_allow_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_tcp_allow_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 2);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_conf_map SEC(".maps");
+
+static inline void swap_src_dst(void *data, struct ethhdr *eth, struct iphdr *ip) {
+    unsigned char tmp_mac[ETH_ALEN];
+    __builtin_memcpy(tmp_mac, eth->h_source, ETH_ALEN);
+    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(eth->h_dest, tmp_mac, ETH_ALEN);
+    __u32 tmp_ip = ip->saddr;
+    ip->saddr = ip->daddr;
+    ip->daddr = tmp_ip;
+}
+
+SEC("xdp")
+int csf_firewall_prog(struct xdp_md *ctx) {
+    void *data_end = (void *)(long)ctx->data_end;
+    void *data = (void *)(long)ctx->data;
+    struct ethhdr *eth = data;
+    struct iphdr *ip;
+
+    if ((void *)(eth + 1) > data_end) return XDP_PASS;
+    if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;
+    ip = (void *)(eth + 1);
+    if ((void *)(ip + 1) > data_end) return XDP_PASS;
+
+    // 1. Check Dynamic Blocklist
+    __u32 src_ip = ip->saddr;
+    __u32 *action = bpf_map_lookup_elem(&csf_drop_map, &src_ip);
+    if (action) {
+        if (*action == 1) { // ECHO
+            swap_src_dst(data, eth, ip);
+            return XDP_TX;
+        }
+        return XDP_DROP;
+    }
+
+    // 2. Strict UDP Whitelist
+    if (ip->protocol == IPPROTO_UDP) {
+        __u32 key_udp_strict = 0;
+        __u32 *udp_strict_flag = bpf_map_lookup_elem(&csf_conf_map, &key_udp_strict);
+        if (udp_strict_flag && *udp_strict_flag == 1) {
+            struct udphdr *udp = (void*)ip + sizeof(*ip);
+            if ((void*)udp + sizeof(*udp) > data_end) return XDP_PASS;
+            __u32 dest_port = bpf_ntohs(udp->dest);
+            __u32 *allowed = bpf_map_lookup_elem(&csf_udp_allow_map, &dest_port);
+            if (!allowed) return XDP_DROP;
+        }
+    }
+
+    // 3. Strict TCP Whitelist
+    if (ip->protocol == IPPROTO_TCP) {
+        __u32 key_tcp_strict = 1;
+        __u32 *tcp_strict_flag = bpf_map_lookup_elem(&csf_conf_map, &key_tcp_strict);
+        if (tcp_strict_flag && *tcp_strict_flag == 1) {
+            struct tcphdr *tcp = (void*)ip + sizeof(*ip);
+            if ((void*)tcp + sizeof(*tcp) > data_end) return XDP_PASS;
+            __u32 dest_port = bpf_ntohs(tcp->dest);
+            __u32 *allowed = bpf_map_lookup_elem(&csf_tcp_allow_map, &dest_port);
+            if (!allowed) return XDP_DROP;
+        }
+    }
+
+    return XDP_PASS;
+}
+char _license[] SEC("license") = "GPL";
+EOF
+
+if command -v clang >/dev/null 2>&1; then
+    print "    > Compiling csf_xdp_drop.c..."
+    clang -O2 -g -target bpf -c /etc/csf/bpf.d/csf_xdp_drop.c -o /etc/csf/bpf.d/csf_xdp_drop.o >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        ok "    > BPF Drop/Echo rule compiled successfully."
+        chmod 644 /etc/csf/bpf.d/csf_xdp_drop.o
+    else
+        error "    > Failed to compile BPF Drop/Echo rule."
+    fi
+else
+    warn "    > clang not found. Cannot compile BPF rules."
+fi
 # ==============================================================================
 # [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE
 # ==============================================================================
@@ -316,6 +421,13 @@ fi
 if [ ! -e "/etc/csf/csf.conf" ]; then
 	cp -avf csf.directadmin.conf /etc/csf/csf.conf
 fi
+
+# --- [Revolutionary Tech] Set ModSecurity Log Path ---
+if [ ! -z "$MODSEC_LOG_PATH" ]; then
+    print "    Setting MODSEC_LOG = \"${MODSEC_LOG_PATH}\" in /etc/csf/csf.conf..."
+    sed -i "s#^MODSEC_LOG = \".*\"#MODSEC_LOG = \"$MODSEC_LOG_PATH\"#" /etc/csf/csf.conf
+fi
+# --- [Revolutionary Tech] End ModSecurity Log Path ---
 
 if [ ! -d /var/lib/csf ]; then
 	mkdir -v -p -m 0600 /var/lib/csf
@@ -645,80 +757,6 @@ if [ ! -e "/etc/csf/alerts" ]; then
 fi
 chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd > /dev/null 2>&1
 chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf > /dev/null 2>&1
-
-mkdir -p webmin/csf/images
-mkdir -p ui/images
-mkdir -p da/images
-mkdir -p interworx/images
-
-cp -avf csf/* webmin/csf/images/
-cp -avf csf/* ui/images/
-cp -avf csf/* da/images/
-cp -avf csf/* interworx/images/
-
-cp -avf messenger/*.php /etc/csf/messenger/
-cp -avf uninstall.directadmin.sh /usr/local/csf/bin/uninstall.sh
-cp -avf csftest.pl /usr/local/csf/bin/
-cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
-cp -avf readme.txt /etc/csf/
-#
-# --- [Revolutionary Tech] Fix sanity.txt path ---
-# Was: cp -avf sanity.txt /usr/local/csf/lib/
-# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
-cp -avf sanity.txt /etc/csf/sanity.txt
-#
-cp -avf csf.rbls /usr/local/csf/lib/
-cp -avf restricted.txt /usr/local/csf/lib/
-cp -avf changelog.txt /etc/csf/
-cp -avf downloadservers /etc/csf/
-cp -avf install.txt /etc/csf/
-cp -avf version.txt /etc/csf/
-cp -avf license.txt /etc/csf/
-cp -avf webmin /usr/local/csf/lib/
-cp -avf ConfigServer /usr/local/csf/lib/
-cp -avf Net /usr/local/csf/lib/
-cp -avf Geo /usr/local/csf/lib/
-cp -avf Crypt /usr/local/csf/lib/
-cp -avf HTTP /usr/local/csf/lib/
-cp -avf JSON /usr/local/csf/lib/
-cp -avf version/* /usr/local/csf/lib/
-cp -avf csf.div /usr/local/csf/lib/
-cp -avf csfajaxtail.js /usr/local/csf/lib/
-cp -avf ui/images /etc/csf/ui/.
-cp -avf profiles /usr/local/csf/
-cp -avf csf.conf /usr/local/csf/profiles/reset_to_defaults.conf
-cp -avf lfd.logrotate /etc/logrotate.d/lfd
-chcon --reference /etc/logrotate.d /etc/logrotate.d/lfd
-
-rm -fv /etc/csf/csf.spamhaus /etc/csf/csf.dshield /etc/csf/csf.tor /etc/csf/csf.bogon
-
-mkdir -p /usr/local/man/man1/
-cp -avf csf.1.txt /usr/local/man/man1/csf.1
-cp -avf csf.help /usr/local/csf/lib/
-chmod 755 /usr/local/man/
-chmod 755 /usr/local/man/man1/
-chmod 644 /usr/local/man/man1/csf.1
-
-chmod -R 600 /etc/csf
-chmod -R 600 /var/lib/csf
-chmod -R 600 /usr/local/csf/bin
-chmod -R 600 /usr/local/csf/lib
-chmod -R 600 /usr/local/csf/tpl
-chmod -R 600 /usr/local/csf/profiles
-chmod 600 /var/log/lfd.log*
-
-chmod -v 700 /usr/local/csf/bin/*.pl /usr/local/csf/bin/*.sh /usr/local/csf/bin/*.pm
-chmod -v 700 /etc/csf/*.pl
-chmod -v 700 /etc/csf/webmin/csf/index.cgi
-chmod -v 644 /etc/cron.d/lfd-cron
-chmod -v 644 /etc/cron.d/csf-cron
-
-cp -avf csget.pl /etc/cron.daily/csget
-chmod 700 /etc/cron.daily/csget
-/etc/cron.daily/csget --nosleep
-
-chmod -v 700 auto.directadmin.pl
-./auto.directadmin.pl $OLDVERSION
 
 mkdir -p /usr/local/directadmin/plugins/csf/
 chmod 711 /usr/local/directadmin/plugins/csf
@@ -1066,3 +1104,602 @@ print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart 
 print "        ${yellowd}sudo csf -ra"
 print
 print
+}
+
+{
+type: uploaded file
+fileName: auto.directadmin.pl
+fullContent:
+#!/usr/bin/perl
+# #
+#   @app                ConfigServer Firewall & Security (CSF)
+#                       Login Failure Daemon (LFD)
+#   @website            https://configserver.shop
+#   @docs               https://docs.configserver.shop
+#   @download           https://download.configserver.shop
+#   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
+#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+#                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+#                       Copyright (C) 2006-2025 Jonathan Michaelson
+#                       Copyright (C) 2006-2025 Way to the Web Ltd.
+#   @license            GPLv3
+#   @updated            11.19.2025
+# #
+## no critic (ProhibitBarewordFileHandles, ProhibitExplicitReturnUndef, ProhibitMixedBooleanOperators, RequireBriefOpen)
+use strict;
+use Fcntl qw(:DEFAULT :flock);
+use IPC::Open3;
+
+umask(0177);
+
+our (%config, %configsetting, $vps, $oldversion);
+
+$oldversion = $ARGV[0];
+
+open (VERSION, "<","/etc/csf/version.txt");
+flock (VERSION, LOCK_SH);
+my $version = <VERSION>;
+close (VERSION);
+chomp $version;
+$version =~ s/\W/_/g;
+system("/bin/cp","-avf","/etc/csf/csf.conf","/var/lib/csf/backup/".time."_pre_v${version}_upgrade");
+
+&loadcsfconfig;
+
+foreach my $alertfile ("sshalert.txt","sualert.txt","sudoalert.txt","webminalert.txt","cpanelalert.txt") {
+	if (-e "/usr/local/csf/tpl/".$alertfile) {
+		sysopen (my $IN, "/usr/local/csf/tpl/".$alertfile, O_RDWR | O_CREAT);
+		flock ($IN, LOCK_EX);
+		my @data = <$IN>;
+		chomp @data;
+		my $hit = 0;
+		foreach my $line (@data) {
+			if ($line =~ /\[text\]/) {$hit = 1}
+		}
+		unless ($hit) {
+			print $IN "\nLog line:\n\n[text]\n";
+		}
+		close ($IN);
+	}
+}
+
+if (-e "/proc/vz/veinfo") {
+	$vps = 1;
+} else {
+	open (IN, "<","/proc/self/status"); 
+	flock (IN, LOCK_SH);
+	while (my $line = <IN>) {
+		chomp $line;
+		if ($line =~ /^envID:\s*(\d+)\s*$/) {
+			if ($1 > 0) {
+				$vps = 1;
+				last;
+			}
+		}
+	}
+	close (IN);
+}
+
+# --- Legacy Migration Blocks (Kept for stability) ---
+if (&checkversion("10.11") and !-e "/var/lib/csf/auto1011") {
+	if (-e "/var/lib/csf/stats/lfdstats") {
+		sysopen (STATS,"/var/lib/csf/stats/lfdstats", O_RDWR | O_CREAT);
+		flock (STATS, LOCK_EX);
+		my @stats = <STATS>;
+		chomp @stats;
+		my %ccs;
+		my @line = split(/\,/,$stats[69]);
+		for (my $x = 0; $x < @line; $x+=2) {$ccs{$line[$x]} = $line[$x+1]}
+		$stats[69] = "";
+		foreach my $key (keys %ccs) {$stats[69] .= "$key,$ccs{$key},"}
+		seek (STATS, 0, 0);
+		truncate (STATS, 0);
+		foreach my $line (@stats) {
+			print STATS "$line\n";
+		}
+		close (STATS);
+	}
+	open (OUT, ">", "/var/lib/csf/auto1011");
+	flock (OUT, LOCK_EX);
+	print OUT time;
+	close (OUT);
+}
+if (&checkversion("10.23") and !-e "/var/lib/csf/auto1023") {
+	if (-e "/etc/csf/csf.blocklists") {
+		sysopen (IN,"/etc/csf/csf.blocklists", O_RDWR | O_CREAT);
+		flock (IN, LOCK_EX);
+		my @data = <IN>;
+		chomp @data;
+		seek (IN, 0, 0);
+		truncate (IN, 0);
+		my $SPAMDROPV6 = 0;
+		my $STOPFORUMSPAMV6 = 0;
+		foreach my $line (@data) {
+			if ($line =~ /^(\#)?SPAMDROPV6/) {$SPAMDROPV6 = 1}
+			if ($line =~ /^(\#)?STOPFORUMSPAMV6/) {$STOPFORUMSPAMV6 = 1}
+			print IN "$line\n";
+		}
+		unless ($SPAMDROPV6) {
+			print IN "\n# Spamhaus IPv6 Don't Route Or Peer List (DROPv6)\n";
+			print IN "# Details: http://www.spamhaus.org/drop/\n";
+			print IN "#SPAMDROPV6|86400|0|https://www.spamhaus.org/drop/dropv6.txt\n";
+		}
+		unless ($STOPFORUMSPAMV6) {
+			print IN "\n# Stop Forum Spam IPv6\n";
+			print IN "# Details: http://www.stopforumspam.com/downloads/\n";
+			print IN "# Many of the lists available contain a vast number of IP addresses so special\n";
+			print IN "# care needs to be made when selecting from their lists\n";
+			print IN "#STOPFORUMSPAMV6|86400|0|http://www.stopforumspam.com/downloads/listed_ip_1_ipv6.zip\n";
+		}
+		close (IN);
+	}
+	open (OUT, ">", "/var/lib/csf/auto1023");
+	flock (OUT, LOCK_EX);
+	print OUT time;
+	close (OUT);
+}
+if (&checkversion("12.02") and !-e "/var/lib/csf/auto1202") {
+	if (-e "/etc/csf/csf.blocklists") {
+		sysopen (IN,"/etc/csf/csf.blocklists", O_RDWR | O_CREAT);
+		flock (IN, LOCK_EX);
+		my @data = <IN>;
+		chomp @data;
+		seek (IN, 0, 0);
+		truncate (IN, 0);
+		foreach my $line (@data) {
+			if ($line =~ /greensnow/) {$line =~ s/http:/https:/g}
+			print IN "$line\n";
+		}
+		close (IN);
+	}
+	open (OUT, ">", "/var/lib/csf/auto1202");
+	flock (OUT, LOCK_EX);
+	print OUT time;
+	close (OUT);
+}
+if (&checkversion("14.03") and !-e "/var/lib/csf/auto1403") {
+	if (-e "/etc/csf/csf.blocklists") {
+		sysopen (IN,"/etc/csf/csf.blocklists", O_RDWR | O_CREAT);
+		flock (IN, LOCK_EX);
+		my @data = <IN>;
+		chomp @data;
+		seek (IN, 0, 0);
+		truncate (IN, 0);
+		foreach my $line (@data) {
+			if ($line =~ /dshield/) {$line =~ s/http:/https:/g}
+			print IN "$line\n";
+		}
+		close (IN);
+	}
+	open (OUT, ">", "/var/lib/csf/auto1403");
+	flock (OUT, LOCK_EX);
+	print OUT time;
+	close (OUT);
+}
+# --- End Migration Blocks ---
+
+if (-e "/etc/csf/csf.allow") {
+	sysopen (IN,"/etc/csf/csf.allow", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /^Include \/etc\/csf\/cpanel\.comodo\.allow/) {next}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+if (-e "/etc/csf/csf.ignore") {
+	sysopen (IN,"/etc/csf/csf.ignore", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /^Include \/etc\/csf\/cpanel\.comodo\.ignore/) {next}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+if (-e "/usr/local/csf/bin/regex.custom.pm") {
+	sysopen (IN,"/usr/local/csf/bin/regex.custom.pm", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /^use strict;/) {next}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+if (-e "/etc/csf/csf.blocklists") {
+	sysopen (IN,"/etc/csf/csf.blocklists", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /feeds\.dshield\.org/) {$line =~ s/feeds\.dshield\.org/www\.dshield\.org/g}
+		if ($line =~ /openbl\.org/i) {next}
+		if ($line =~ /autoshun/i) {next}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+if (-e "/var/lib/csf/csf.tempban") {
+	sysopen (IN,"/var/lib/csf/csf.tempban", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /^\d+\:/) {$line =~ s/\:/\|/g}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+if (-e "/var/lib/csf/csf.tempallow") {
+	sysopen (IN,"/var/lib/csf/csf.tempallow", O_RDWR | O_CREAT);
+	flock (IN, LOCK_EX);
+	my @data = <IN>;
+	chomp @data;
+	seek (IN, 0, 0);
+	truncate (IN, 0);
+	foreach my $line (@data) {
+		if ($line =~ /^\d+\:/) {$line =~ s/\:/\|/g}
+		print IN "$line\n";
+	}
+	close (IN);
+}
+
+if ($config{TESTING}) {
+
+	open (IN, "<", "/etc/ssh/sshd_config") or die $!;
+	flock (IN, LOCK_SH) or die $!;
+	my @sshconfig = <IN>;
+	close (IN);
+	chomp @sshconfig;
+
+	my $sshport = "22";
+	foreach my $line (@sshconfig) {
+		if ($line =~ /^Port (\d+)/) {$sshport = $1}
+	}
+
+	$config{TCP_IN} =~ s/\s//g;
+	if ($config{TCP_IN} ne "") {
+		foreach my $port (split(/\,/,$config{TCP_IN})) {
+			if ($port eq $sshport) {$sshport = "22"}
+		}
+	}
+
+	if ($sshport ne "22") {
+		$config{TCP_IN} .= ",$sshport";
+		$config{TCP6_IN} .= ",$sshport";
+		open (IN, "<", "/etc/csf/csf.conf") or die $!;
+		flock (IN, LOCK_SH) or die $!;
+		my @config = <IN>;
+		close (IN);
+		chomp @config;
+		open (OUT, ">", "/etc/csf/csf.conf") or die $!;
+		flock (OUT, LOCK_EX) or die $!;
+		foreach my $line (@config) {
+			if ($line =~ /^TCP6_IN/) {
+				print OUT "TCP6_IN = \"$config{TCP6_IN}\"\n";
+				print "\n*** SSH port $sshport added to the TCP6_IN port list\n\n";
+			}
+			elsif ($line =~ /^TCP_IN/) {
+				print OUT "TCP_IN = \"$config{TCP_IN}\"\n";
+				print "\n*** SSH port $sshport added to the TCP_IN port list\n\n";
+			}
+			else {
+				print OUT $line."\n";
+			}
+		}
+		close OUT;
+		&loadcsfconfig;
+
+	}
+
+	open (FH, "<", "/proc/sys/kernel/osrelease");
+	flock (IN, LOCK_SH);
+	my @data = <FH>;
+	close (FH);
+	chomp @data;
+    
+    # [REVOLUTIONARY TECH UPDATE]
+    # Logic updated to support Kernel 4, 5, 6+
+	if ($data[0] =~ /^(\d+)\.(\d+)\.(\d+)/) {
+		my $maj = $1;
+		my $mid = $2;
+		my $min = $3;
+        # Enable Conntrack if Kernel is 3.7+ OR Major version is > 3
+		if ( ($maj == 3 and $mid > 6) or ($maj > 3) ) {
+			open (IN, "<", "/etc/csf/csf.conf") or die $!;
+			flock (IN, LOCK_SH) or die $!;
+			my @config = <IN>;
+			close (IN);
+			chomp @config;
+			open (OUT, ">", "/etc/csf/csf.conf") or die $!;
+			flock (OUT, LOCK_EX) or die $!;
+			foreach my $line (@config) {
+				if ($line =~ /^USE_CONNTRACK =/) {
+					print OUT "USE_CONNTRACK = \"1\"\n";
+					print "\n*** USE_CONNTRACK Enabled (Modern Kernel Detected)\n\n";
+				} else {
+					print OUT $line."\n";
+				}
+			}
+			close OUT;
+			&loadcsfconfig;
+		}
+	}
+
+	my @ipdata;
+	eval {
+		local $SIG{__DIE__} = undef;
+		local $SIG{'ALRM'} = sub {die "alarm\n"};
+		alarm(3);
+		my ($childin, $childout);
+		my $cmdpid = open3($childin, $childout, $childout, "$config{IPTABLES} --wait -L OUTPUT -nv");
+		@ipdata = <$childout>;
+		waitpid ($cmdpid, 0);
+		chomp @ipdata;
+		if ($ipdata[0] =~ /# Warning: iptables-legacy tables present/) {shift @ipdata}
+		alarm(0);
+	};
+	alarm(0);
+	if ($@ ne "alarm\n" and $ipdata[0] =~ /^Chain OUTPUT/) {
+		$config{IPTABLESWAIT} = "--wait";
+		$config{WAITLOCK} = 1;
+		open (IN, "<", "/etc/csf/csf.conf") or die $!;
+		flock (IN, LOCK_SH) or die $!;
+		my @config = <IN>;
+		close (IN);
+		chomp @config;
+		open (OUT, ">", "/etc/csf/csf.conf") or die $!;
+		flock (OUT, LOCK_EX) or die $!;
+		foreach my $line (@config) {
+			if ($line =~ /WAITLOCK =/) {
+				print OUT "WAITLOCK = \"1\"\n";
+			} else {
+				print OUT $line."\n";
+			}
+		}
+		close OUT;
+		&loadcsfconfig;
+	}
+
+	if (-e $config{IP6TABLES} and !$vps) {
+		my ($childin, $childout);
+		my $cmdpid;
+		if (-e $config{IP}) {$cmdpid = open3($childin, $childout, $childout, $config{IP}, "-oneline", "addr")}
+		elsif (-e $config{IFCONFIG}) {$cmdpid = open3($childin, $childout, $childout, $config{IFCONFIG})}
+		my @ifconfig = <$childout>;
+		waitpid ($cmdpid, 0);
+		chomp @ifconfig;
+		if (grep {$_ =~ /\s*inet6/} @ifconfig) {
+			$config{IPV6} = 1;
+			open (FH, "<", "/proc/sys/kernel/osrelease");
+			flock (IN, LOCK_SH);
+			my @data = <FH>;
+			close (FH);
+			chomp @data;
+			if ($data[0] =~ /^(\d+)\.(\d+)\.(\d+)/) {
+				my $maj = $1;
+				my $mid = $2;
+				my $min = $3;
+				if (($maj > 2) or (($maj > 1) and ($mid > 6)) or (($maj > 1) and ($mid > 5) and ($min > 19))) {
+					$config{IPV6_SPI} = 1;
+				} else {
+					$config{IPV6_SPI} = 0;
+				}
+			}
+			open (IN, "<", "/etc/csf/csf.conf") or die $!;
+			flock (IN, LOCK_SH) or die $!;
+			my @config = <IN>;
+			close (IN);
+			chomp @config;
+			open (OUT, ">", "/etc/csf/csf.conf") or die $!;
+			flock (OUT, LOCK_EX) or die $!;
+			foreach my $line (@config) {
+				if ($line =~ /^IPV6 =/) {
+					print OUT "IPV6 = \"$config{IPV6}\"\n";
+					print "\n*** IPV6 Enabled\n\n";
+				}
+				elsif ($line =~ /^IPV6_SPI =/) {
+					print OUT "IPV6_SPI = \"$config{IPV6_SPI}\"\n";
+					print "\n*** IPV6_SPI set to $config{IPV6_SPI}\n\n";
+				} else {
+					print OUT $line."\n";
+				}
+			}
+			close OUT;
+			&loadcsfconfig;
+		}
+	}
+}
+
+open (IN, "<", "csf.directadmin.conf") or die $!;
+flock (IN, LOCK_SH) or die $!;
+my @config = <IN>;
+close (IN);
+chomp @config;
+open (OUT, ">", "/etc/csf/csf.conf") or die $!;
+flock (OUT, LOCK_EX) or die $!;
+foreach my $line (@config) {
+	if ($line =~ /^\#/) {
+		print OUT $line."\n";
+		next;
+	}
+	if ($line !~ /=/) {
+		print OUT $line."\n";
+		next;
+	}
+	my ($name,$value) = split (/=/,$line,2);
+	$name =~ s/\s//g;
+	if ($value =~ /\"(.*)\"/) {
+		$value = $1;
+	} else {
+		print "Error: Invalid configuration line [$line]";
+	}
+	if (&checkversion("10.15") and !-e "/var/lib/csf/auto1015") {
+		if ($name eq "MESSENGER_RATE" and $config{$name} eq "30/m") {$config{$name} = "100/s"}
+		if ($name eq "MESSENGER_BURST" and $config{$name} eq "5") {$config{$name} = "150"}
+		open (my $AUTO, ">", "/var/lib/csf/auto1015");
+		flock ($AUTO, LOCK_EX);
+		print $AUTO time;
+		close ($AUTO);
+	}
+	if ($configsetting{$name}) {
+		print OUT "$name = \"$config{$name}\"\n";
+	} else {
+		if (&checkversion("9.29") and !-e "/var/lib/csf/auto929" and $name eq "PT_USERRSS") {
+			$line = "PT_USERRSS = \"$config{PT_USERMEM}\"";
+			open (my $AUTO, ">", "/var/lib/csf/auto929");
+			flock ($AUTO, LOCK_EX);
+			print $AUTO time;
+			close ($AUTO);
+		}
+		if ($name eq "CC_SRC") {$line = "CC_SRC = \"1\""}
+		print OUT $line."\n";
+		print "New setting: $name\n";
+	}
+}
+close OUT;
+
+if ($config{TESTING}) {
+    # [REVOLUTIONARY TECH UPDATE]
+    # Added fallback to 'ss' because 'netstat' is deprecated/missing on modern minimal distros
+	my @netstat = `netstat -lpn 2>/dev/null`;
+    if (!@netstat) {
+        @netstat = `ss -lpn`;
+    }
+	chomp @netstat;
+	my @tcpports;
+	my @udpports;
+	my @tcp6ports;
+	my @udp6ports;
+	foreach my $line (@netstat) {
+		if ($line =~ /^(\w+).* (\d+\.\d+\.\d+\.\d+):(\d+)/) {
+			if ($2 eq '127.0.0.1') {next}
+			if ($1 eq "tcp") {
+				push @tcpports, $3;
+			}
+			elsif ($1 eq "udp") {
+				push @udpports, $3;
+			}
+		}
+		if ($line =~ /^(\w+).* (::):(\d+) /) {
+			if ($1 eq "tcp") {
+				push @tcp6ports, $3;
+			}
+			elsif ($1 eq "udp") {
+				push @udp6ports, $3;
+			}
+		}
+	}
+
+	@tcpports = sort { $a <=> $b } @tcpports;
+	@udpports = sort { $a <=> $b } @udpports;
+	@tcp6ports = sort { $a <=> $b } @tcp6ports;
+	@udp6ports = sort { $a <=> $b } @udp6ports;
+
+	print "\nTCP ports currently listening for incoming connections:\n";
+	my $last = "";
+	foreach my $port (@tcpports) {
+		if ($port ne $last) {
+			if ($port ne $tcpports[0]) {print ","}
+			print $port;
+			$last = $port;
+		}
+	}
+	print "\n\nUDP ports currently listening for incoming connections:\n";
+	$last = "";
+	foreach my $port (@udpports) {
+		if ($port ne $last) {
+			if ($port ne $udpports[0]) {print ","}
+			print $port;
+			$last = $port;
+		}
+	}
+	my $opts = "TCP_*, UDP_*";
+	if (@tcp6ports or @udp6ports) {
+		$opts .= ", IPV6, TCP6_*, UDP6_*";
+		print "\n\nIPv6 TCP ports currently listening for incoming connections:\n";
+		my $last = "";
+		foreach my $port (@tcp6ports) {
+			if ($port ne $last) {
+				if ($port ne $tcp6ports[0]) {print ","}
+				print $port;
+				$last = $port;
+			}
+		}
+		print "\n";
+		print "\nIPv6 UDP ports currently listening for incoming connections:\n";
+		$last = "";
+		foreach my $port (@udp6ports) {
+			if ($port ne $last) {
+				if ($port ne $udp6ports[0]) {print ","}
+				print $port;
+				$last = $port;
+			}
+		}
+	}
+	print "\n\nNote: The port details above are for information only, csf hasn't been auto-configured.\n\n";
+	print "Don't forget to:\n";
+	print "1. Configure the following options in the csf configuration to suite your server: $opts\n";
+	print "2. Restart csf and lfd\n";
+	print "3. Set TESTING to 0 once you're happy with the firewall, lfd will not run until you do so\n";
+}
+
+if ($ENV{SSH_CLIENT}) {
+	my $ip = (split(/ /,$ENV{SSH_CLIENT}))[0];
+	if ($ip =~ /(\d+\.\d+\.\d+\.\d+)/) {
+		print "\nAdding current SSH session IP address to the csf whitelist in csf.allow:\n";
+		system("/usr/sbin/csf -a $1 csf SSH installation/upgrade IP address");
+	}
+}
+
+exit;
+###############################################################################
+sub loadcsfconfig {
+	open (IN, "<", "/etc/csf/csf.conf") or die $!;
+	flock (IN, LOCK_SH) or die $!;
+	my @config = <IN>;
+	close (IN);
+	chomp @config;
+
+	foreach my $line (@config) {
+		if ($line =~ /^\#/) {next}
+		if ($line !~ /=/) {next}
+		my ($name,$value) = split (/=/,$line,2);
+		$name =~ s/\s//g;
+		if ($value =~ /\"(.*)\"/) {
+			$value = $1;
+		} else {
+			print "Error: Invalid configuration line [$line]";
+		}
+		$config{$name} = $value;
+		$configsetting{$name} = 1;
+	}
+	return;
+}
+###############################################################################
+sub checkversion {
+	my $version = shift;
+	my ($maj, $min) = split(/\./,$version);
+	my ($oldmaj, $oldmin) = split(/\./,$oldversion);
+
+	if ($oldmaj == 0 or $oldmaj eq "") {return 0}
+
+	if (($oldmaj < $maj) or ($oldmaj == $maj and $oldmin < $min)) {return 1} else {return 0}
+}
+###############################################################################

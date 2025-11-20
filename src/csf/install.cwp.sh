@@ -13,19 +13,6 @@
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
 #   @updated            11.05.2025
-#   
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 3 of the License, or (at
-#   your option) any later version.
-#   
-#   This program is distributed in the hope that it will be useful, but
-#   WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
 # #
 
 umask 0177
@@ -255,6 +242,119 @@ else
     warn "    > 'bpf.d' directory not found in source. Skipping rules copy."
 fi
 
+# --- Compile the Drop/Echo Rule ---
+print "    > Compiling BPF Drop/Echo rule..."
+
+cat << 'EOF' > /etc/csf/bpf.d/csf_xdp_drop.c
+// 
+// CSF XDP Drop Actions
+// Implements high-performance packet handling for common firewall targets.
+//
+// Targets:
+//   DROP   -> XDP_DROP (Silent, immediate drop)
+//   ECHO   -> XDP_TX   (Reflect packet back to sender)
+//   REJECT -> XDP_TX   (Reflects, effectively rejecting without RST generation complexity)
+//
+
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/udp.h>
+#include <linux/tcp.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+
+// Define a map to store blocked IPs and their action code
+// Key: IP Address (u32), Value: Action Code (u32)
+// Action Codes:
+//   0 = XDP_DROP (DROP, TARPIT, DELUDE - simplify to drop for speed)
+//   1 = XDP_TX   (ECHO, REJECT - bounce back)
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 100000);
+    __type(key, __u32);
+    __type(value, __u32);
+} csf_drop_map SEC(".maps");
+
+// Helper to swap MAC addresses for XDP_TX (Echo)
+static inline void swap_src_dst_mac(void *data) {
+    struct ethhdr *eth = data;
+    unsigned char tmp[ETH_ALEN];
+    __builtin_memcpy(tmp, eth->h_source, ETH_ALEN);
+    __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+    __builtin_memcpy(eth->h_dest, tmp, ETH_ALEN);
+}
+
+// Helper to swap IP addresses for XDP_TX
+static inline void swap_src_dst_ipv4(struct iphdr *ip) {
+    __u32 tmp = ip->saddr;
+    ip->saddr = ip->daddr;
+    ip->daddr = tmp;
+}
+
+SEC("xdp")
+int csf_firewall_prog(struct xdp_md *ctx) {
+    void *data_end = (void *)(long)ctx->data_end;
+    void *data = (void *)(long)ctx->data;
+    struct ethhdr *eth = data;
+    struct iphdr *ip;
+
+    // sanity check
+    if ((void *)(eth + 1) > data_end)
+        return XDP_PASS;
+
+    // Only handle IPv4 for now
+    if (eth->h_proto != bpf_htons(ETH_P_IP))
+        return XDP_PASS;
+
+    ip = (void *)(eth + 1);
+    if ((void *)(ip + 1) > data_end)
+        return XDP_PASS;
+
+    // Lookup Source IP in our map
+    __u32 src_ip = ip->saddr;
+    __u32 *action = bpf_map_lookup_elem(&csf_drop_map, &src_ip);
+
+    if (action) {
+        // Found in blocklist! Check action code.
+        
+        // Action 0: DROP (Standard Drop, Tarpit, etc.)
+        if (*action == 0) {
+            return XDP_DROP;
+        }
+
+        // Action 1: ECHO / REJECT (Reflect packet)
+        if (*action == 1) {
+            // We need to modify the packet to send it back
+            swap_src_dst_mac(data);
+            swap_src_dst_ipv4(ip);
+            return XDP_TX; 
+        }
+        
+        // Default fallback if unknown action code
+        return XDP_DROP; 
+    }
+
+    return XDP_PASS;
+}
+
+char _license[] SEC("license") = "GPL";
+EOF
+
+if command -v clang >/dev/null 2>&1; then
+    print "    > Compiling csf_xdp_drop.c..."
+    # Using -g for BTF if available, otherwise standard BPF target
+    clang -O2 -g -target bpf -c /etc/csf/bpf.d/csf_xdp_drop.c -o /etc/csf/bpf.d/csf_xdp_drop.o >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        ok "    > BPF Drop/Echo rule compiled successfully: /etc/csf/bpf.d/csf_xdp_drop.o"
+        chmod 644 /etc/csf/bpf.d/csf_xdp_drop.o
+    else
+        error "    > Failed to compile BPF Drop/Echo rule."
+    fi
+else
+    warn "    > clang not found. Cannot compile BPF rules."
+fi
 # --- [Revolutionary Tech] End BPF/XDP Block ---
 #
 
@@ -321,6 +421,12 @@ else
     
     print "    > [IPtables] RT Triage rules active."
 fi
+# ==============================================================================
+
+print "    Installing Revolutionary Technology pre-install scripts..."
+mkdir -p -m 0755 /usr/local/include/csf/pre.d/
+cp -avf stressengine.sh /usr/local/include/csf/pre.d/
+chmod -v 700 /usr/local/include/csf/pre.d/*.sh
 # ==============================================================================
 
 if [ -e "/etc/csf/alert.txt" ]; then
