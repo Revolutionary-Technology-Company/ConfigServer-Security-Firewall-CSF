@@ -88,7 +88,7 @@ if command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then
 
     # Rule 3: Dynamic Flood Triage (The "Money Maker" for NFT)
     # If > 50 SYNs/sec from one IP, add to 'flooders' set for 10m and drop.
-    nft add set inet rt_emergency flooders { type ipv4_addr; flags dynamic, timeout; timeout 10m; } 2>/dev/null
+	nft add set inet rt_emergency flooders { type ipv4_addr\; flags dynamic, timeout\; timeout 10m\; } 2>/dev/null
     # Drop anyone already in the set
     nft add rule inet rt_emergency input ip saddr @flooders drop 2>/dev/null
     # Check rate, add to set if exceeded
