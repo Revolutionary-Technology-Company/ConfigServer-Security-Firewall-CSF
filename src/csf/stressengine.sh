@@ -65,72 +65,72 @@ fi
 echo "[RT-StressEngine] Active Firewall Mode: $MODE"
 
 # ==============================================================================
-# 3A. NFTABLES IMPLEMENTATION (Modern)
+# 3A. NFTABLES IMPLEMENTATION (Modern/Corrected Syntax)
 # ==============================================================================
 if [ "$MODE" == "NFTABLES" ]; then
-    echo "[RT-StressEngine] Applying Native NFTables Rulesets..."
+ echo "[RT-StressEngine] Applying Native NFTables Rulesets..."
+ sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
+ sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1
+ $NFT -f - <<EOF
+ table inet rt_security {
+  # Dynamic Penalty Box (Respects Tuned Size)
+  set rt_penalty_box {
+   type ipv4_addr
+   flags dynamic, timeout
+   timeout ${RT_TARPIT_TIMEOUT}s
+   size ${LF_IPSET_MAXELEM}
+  }
 
-    sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
-    sysctl -w net.ipv4.tcp_rfc1337=1 >/dev/null 2>&1
+  chain rt_synproxy {
+   synproxy mss 1460 wscale 80 timestamp sack-perm accept
+  }
 
-    $NFT -f - <<EOF
-    table inet rt_security {
-        # Dynamic Penalty Box (Respects Tuned Size)
-        set rt_penalty_box {
-            type ipv4_addr
-            flags dynamic, timeout
-            timeout ${RT_TARPIT_TIMEOUT}s
-            size ${LF_IPSET_MAXELEM}
-        }
+  chain input {
+   # Priority -400 places us BEFORE Connection Tracking (Raw Table equivalent).
+   type filter hook input priority -400; policy accept;
 
-        chain rt_synproxy {
-            synproxy mss 1460 wscale 80 timestamp sack-perm accept
-        }
+   # iptables -t raw -A RT_STRESS_ENGINE_RAW -p tcp --tcp-flags ALL NONE -j DROP
+   # Note the required spaces around the '&' and '==' operators.
+   ip protocol tcp tcp flags & (fin\|syn\|rst\|ack\|psh\|urg\) == 0x0 drop
 
-        chain input {
-		# Priority -400 places us BEFORE Connection Tracking (Raw Table equivalent).
-		# This is crucial for a "Stress Engine" to prevent state-table exhaustion.
-		type filter hook input priority -400; policy accept;
+   # iptables -t raw -A RT_STRESS_ENGINE_RAW -p tcp --tcp-flags ALL ALL -j DROP
+   ip protocol tcp tcp flags & (fin\|syn\|rst\|ack\|psh\|urg\) == \(fin\|syn\|rst\|ack\|psh\|urg\) drop
 
-            ct state invalid drop
-            ct state established, related accept
+   # iptables -A RT_STRESS_ENGINE_FILTER -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
+   # Required spaces around '&', '>>', and '=='.
+   ip protocol tcp tcp flags & (syn\) == syn payload @th + 0 4 bytes & 0x000F0000 >> 16 == 0x5 drop
 
-            # Enforce Penalty Box
-            ip saddr @rt_penalty_box drop
+   # iptables -A RT_STRESS_ENGINE_FILTER -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
+   ip protocol tcp tcp flags & (syn\) == syn payload @nh + 34 2 bytes & 0xFFFF == 0x40 drop
 
-            # Validity Checks
-            tcp flags & (fin|syn|rst|ack) != syn ct state new drop
-            tcp flags & (fin|syn|rst|psh|ack|urg) == 0 drop
-            tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) drop
-            
-            # Signatures
-            #@th,272,16 0x40 drop
-            #@nh,96,4 & 0x000F0000 == 0x50000 drop
-			#meta l4proto { tcp, udp } payload @th, 272, 16 u16 == 0x40 drop
-			#ip ihl != 5 drop
-			#tcp @th,272,16 0x0040 drop
-			nft add rule ip filter INPUT ip protocol tcp payload @th + 0 4 bytes & 0x000F0000 >> 16 == 0x5 drop
-			nft add rule ip filter INPUT ip protocol tcp payload @nh + 34 2 bytes & 0xFFFF == 0x40 drop
+   # Standard connection tracking rules
+   ct state invalid drop
+   ct state established, related accept
 
-            # SYN Proxy
-            tcp dport { 80, 443 } tcp flags & (fin|syn|rst|ack) == syn jump rt_synproxy
+   # Enforce Penalty Box
+   ip saddr @rt_penalty_box drop
 
-            # Dynamic Rate Limiting (Respects Tuned Rate/Burst)
-            tcp flags & (fin|syn|rst|ack) == syn \
-                limit rate ${SYNFLOOD_RATE_NFT} burst ${SYNFLOOD_BURST} packets \
-                add @rt_penalty_box { ip saddr }
+   # SYN Proxy jump
+   tcp flags & (fin|syn|rst|ack) == syn jump rt_synproxy
 
-            icmp type echo-request limit rate 5/second accept
-            icmp type echo-request drop
-        }
-    }
+   # Dynamic Rate Limiting (Respects Tuned Rate/Burst)
+   # Required spaces around '&' and '=='
+   tcp flags & (fin\|syn\|rst\|ack\) == syn limit rate ${SYNFLOOD_RATE_NFT} burst ${SYNFLOOD_BURST} packets add @rt_penalty_box { ip saddr }
+
+   # ICMP Rate Limits
+   icmp type echo-request limit rate 5/second accept
+   icmp type echo-request drop
+  }
+ }
 EOF
+ if [ -f "$DENY_PERM" ]; then
+  grep -vE "^#|^$" "$DENY_PERM" | awk '{print $1}' | while read IP; do
+   $NFT add element inet rt_security rt_penalty_box { $IP timeout 30d } 2>/dev/null
+  done
+ fi
+# ==============================================================================
 
-    if [ -f "$DENY_PERM" ]; then
-        grep -vE "^#|^$" "$DENY_PERM" | awk '{print $1}' | while read IP; do
-            $NFT add element inet rt_security rt_penalty_box { $IP timeout 30d } 2>/dev/null
-        done
-    fi
+
 
 # ==============================================================================
 # 3B. IPTABLES IMPLEMENTATION (Legacy)
