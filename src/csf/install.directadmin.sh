@@ -349,6 +349,7 @@ if command -v clang >/dev/null 2>&1; then
 else
     warn "    > clang not found. Cannot compile BPF rules."
 fi
+
 # ==============================================================================
 # [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE (DUAL STACK)
 # ==============================================================================
@@ -375,11 +376,11 @@ if command -v nft >/dev/null 2>&1; then
 
     # C. Drop Malformed Headers (The "IHL" Check)
     # NFT Native: Check if IP Header Length is NOT 5 (standard).
-    nft add rule inet rt_emergency input ip version 4 ip ihl != 5 drop 2>/dev/null
+    nft add rule inet filter input ip protocol tcp tcp flags \& \(syn\) == syn payload @th + 0 4 bytes & 0x000F0000 >> 16 == 0x5 drop
 
     # D. Drop Bogus TCP Options (Botnet Signature)
     # NFT Native: @th (Transport Header), Offset 272 bits (34*8), Length 16 bits.
-    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
+    nft add rule inet filter input ip protocol tcp payload @nh + 34 2 bytes & 0xFFFF == 0x40 drop
 
     # E. Enforce Dynamic Blacklist
     # If source IP is in 'flooders', drop immediately.

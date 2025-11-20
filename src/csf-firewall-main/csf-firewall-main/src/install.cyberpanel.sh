@@ -2,17 +2,15 @@
 # #
 #   @app                ConfigServer Firewall & Security (CSF)
 #                       Login Failure Daemon (LFD)
-#   @website            https://configserver.shop
-#   @docs               https://docs.configserver.shop
-#   @download           https://download.configserver.shop
-#   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
-#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#   @copyright          Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#   @copyright          Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
-#   @copyright          Copyright (C) 2006-2025 Jonathan Michaelson
-#   @copyright          Copyright (C) 2006-2025 Way to the Web Ltd.
+#   @website            https://configserver.dev
+#   @docs               https://docs.configserver.dev
+#   @download           https://download.configserver.dev
+#   @repo               https://github.com/Aetherinox/csf-firewall
+#   @copyright          Copyright (C) 2025-2026 Aetherinox
+#                       Copyright (C) 2006-2025 Jonathan Michaelson
+#                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.17.2025
+#   @updated            10.25.2025
 #   
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -100,61 +98,6 @@ else
     echo "...Perl modules OK"
     echo
 fi
-#
-# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
-#
-print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
-rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
-
-if [ -f /usr/bin/apt-get ]; then
-    # --- This is a Debian or Ubuntu system ---
-    print "    > Detected apt package manager (Debian/Ubuntu)."
-    export DEBIAN_FRONTEND=noninteractive
-    # Install dependencies for signing and building
-    apt-get update -y > /dev/null 2>&1
-    apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
-
-elif [ -f /usr/bin/yum ]; then
-    # --- This is a Red Hat, CentOS, or AlmaLinux system ---
-    print "    > Detected yum package manager (RHEL/CentOS/AlmaLinux)."
-    yum install epel-release -y > /dev/null 2>&1
-    # Install dependencies for signing and building
-    yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
-else
-    print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
-fi
-
-# --- [Revolutionary Tech] Secure Boot Module Signing ---
-# This block checks if Secure Boot is on. If it is, it runs the signing script.
-print "    > Checking Secure Boot state..."
-if command -v mokutil >/dev/null 2>&1; then
-    if mokutil --sb-state | grep -q "SecureBoot enabled"; then
-        print "    > Secure Boot is ENABLED. Running kernel module signer..."
-        if [ -f "rt-sign-module.sh" ]; then
-            chmod 700 rt-sign-module.sh
-            ./rt-sign-module.sh
-        else
-            print "    ${redl}ERROR:${greym} rt-sign-module.sh not found. Cannot sign modules."
-        fi
-    else
-        print "    > Secure Boot is disabled or not supported. Skipping module signing."
-    fi
-else
-    print "    > mokutil not found. Cannot determine Secure Boot state. Skipping module signing."
-fi
-
-# --- [Revolutionary Tech] Final Module Load Test ---
-print "    > Loading xt_TARPIT module..."
-if ! modprobe xt_TARPIT; then
-    print "    ${redl}WARNING:${greym} Failed to load xt_TARPIT module. Tarpit functionality may not work."
-    echo "1" > /tmp/rt_tarpit_failed
-else
-    print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
-fi
-# --- [Revolutionary Tech] End Tarpit Block ---
-#
 
 mkdir -v -m 0600 /etc/csf
 mkdir -v -m 0600 /var/lib/csf
@@ -169,19 +112,6 @@ mkdir -v -m 0600 /usr/local/csf
 mkdir -v -m 0600 /usr/local/csf/bin
 mkdir -v -m 0600 /usr/local/csf/lib
 mkdir -v -m 0600 /usr/local/csf/tpl
-
-# --- [Revolutionary Tech] RT Control ---
-print "    Providing immediate DDoS protection from Revolutionary Technology..."
-sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
-sysctl -p > /dev/null 2>&1
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
-print "    Installing Revolutionary Technology pre-install scripts..."
-mkdir -p -m 0755 /usr/local/include/csf/pre.d/
-cp -avf stressengine.sh /usr/local/include/csf/pre.d/
-chmod -v 700 /usr/local/include/csf/pre.d/*.sh
-# --- [Revolutionary Tech] End RT Control ---
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
@@ -207,20 +137,6 @@ fi
 if [ ! -e "/etc/csf/csf.allow" ]; then
 	cp -avf csf.cyberpanel.allow /etc/csf/csf.allow
 fi
-
-# --- [UPDATED] Add Google ASNs to csf.allow ---
-print "    Adding Google ASNs to /etc/csf/csf.allow..."
-
-# We use grep -q to avoid adding duplicate entries on re-installation
-grep -q "ASN:15169" /etc/csf/csf.allow || echo "ASN:15169 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:36040" /etc/csf/csf.allow || echo "ASN:36040 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:43515" /etc/csf/csf.allow || echo "ASN:43515 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:36561" /etc/csf/csf.allow || echo "ASN:36561 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:19527" /etc/csf/csf.allow || echo "ASN:19527 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:139070" /etc/csf/csf.allow || echo "ASN:139070 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:396982" /etc/csf/csf.allow || echo "ASN:396982 # Google ASN" >> /etc/csf/csf.allow
-# --- [UPDATED] End Google ASN Block ---
-
 if [ ! -e "/etc/csf/csf.deny" ]; then
 	cp -avf csf.deny /etc/csf/.
 fi
@@ -314,16 +230,6 @@ fi
 if [ ! -e "/usr/local/csf/tpl/queuealert.txt" ]; then
 	cp -avf queuealert.txt /usr/local/csf/tpl/.
 fi
-#
-# --- [Revolutionary Tech] Set ModSecurity Log Path ---
-#
-if [ ! -z "$MODSEC_LOG_PATH" ]; then
-    print "    Setting MODSEC_LOG = \"${MODSEC_LOG_PATH}\" in /etc/csf/csf.conf..."
-    sed -i "s#^MODSEC_LOG = \".*\"#MODSEC_LOG = \"$MODSEC_LOG_PATH\"#" /etc/csf/csf.conf
-fi
-#
-# --- [Revolutionary Tech] End ModSecurity Log Path ---
-#
 if [ ! -e "/usr/local/csf/tpl/modsecipdbalert.txt" ]; then
 	cp -avf modsecipdbalert.txt /usr/local/csf/tpl/.
 fi
@@ -534,12 +440,7 @@ cp -avf uninstall.cyberpanel.sh /usr/local/csf/bin/uninstall.sh
 cp -avf csftest.pl /usr/local/csf/bin/
 cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
 cp -avf readme.txt /etc/csf/
-#
-# --- [Revolutionary Tech] Fix sanity.txt path ---
-# Was: cp -avf sanity.txt /usr/local/csf/lib/
-# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
-cp -avf sanity.txt /etc/csf/sanity.txt
-#
+cp -avf sanity.txt /usr/local/csf/lib/
 cp -avf csf.rbls /usr/local/csf/lib/
 cp -avf restricted.txt /usr/local/csf/lib/
 cp -avf changelog.txt /etc/csf/
@@ -594,7 +495,7 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.cyberpanel.pl
 ./auto.cyberpanel.pl $OLDVERSION
 
-if test \`cat /proc/1/comm\` = "systemd"; then
+if test `cat /proc/1/comm` = "systemd"; then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then
             /sbin/chkconfig csf off
@@ -1153,7 +1054,7 @@ prinp "${APP_NAME_SHORT:-CSF} > Installation Complete" \
        "Your installation is complete. Read important notes below."
 
 print "    For more information on how to use ${APP_NAME_SHORT:-CSF}; visit"
-print "        ${yellowd}${APP_LINK_DOCS:-https://docs.configserver.shop}"
+print "        ${yellowd}${APP_LINK_DOCS:-https://docs.configserver.dev}"
 if [ -f "$CSF_CONF" ]; then
 	print "    "
 	print "    The next step in the process should be to open the config file located at"

@@ -107,8 +107,10 @@ if [ "$MODE" == "NFTABLES" ]; then
             #@th,272,16 0x40 drop
             #@nh,96,4 & 0x000F0000 == 0x50000 drop
 			#meta l4proto { tcp, udp } payload @th, 272, 16 u16 == 0x40 drop
-			ip ihl != 5 drop
-			tcp @th,272,16 0x0040 drop
+			#ip ihl != 5 drop
+			#tcp @th,272,16 0x0040 drop
+			nft add rule ip filter INPUT ip protocol tcp payload @th + 0 4 bytes & 0x000F0000 >> 16 == 0x5 drop
+			nft add rule ip filter INPUT ip protocol tcp payload @nh + 34 2 bytes & 0xFFFF == 0x40 drop
 
             # SYN Proxy
             tcp dport { 80, 443 } tcp flags & (fin|syn|rst|ack) == syn jump rt_synproxy

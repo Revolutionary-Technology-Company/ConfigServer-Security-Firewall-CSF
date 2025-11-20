@@ -56,52 +56,62 @@ fi
 cd "$script_dir" || exit 1
 
 # ==============================================================================
-# [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE
-# ==============================================================================
-# This runs BEFORE everything else to stop active DDoS attacks instantly.
-# It auto-detects NFTables vs IPtables and applies raw packet filters.
+# [Revolutionary Tech] RT CONTROL - IMMEDIATE TRIAGE (DUAL STACK)
 # ==============================================================================
 print "    [RT-Control] Engaging Immediate DDoS Protection..."
 
-# 1. Kernel Hardening
+# 1. Kernel Hardening (Universal)
 sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null 2>&1
 echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>&1
 sysctl -p > /dev/null 2>&1
 
-# 2. Detect Native NFTables vs Legacy IPtables
-# Forced to false to use IPTables
-if false; then
-    print "    > Detected NFTables. Applying STRICT native filters..."
-    
-    # Create high-priority table (-1000 priority runs before everything)
+# 2. LAYER A: Native NFTables (If available)
+# We apply this first. If the OS supports 'nft', we lock it down natively.
+if command -v nft >/dev/null 2>&1; then
+    print "    > [Layer A] NFTables binary found. Applying NATIVE filters..."
+
+    # A. Create Table & Chain
+    # Priority -1000 places this BEFORE connection tracking (Raw equivalent)
     nft add table inet rt_emergency 2>/dev/null
     nft add chain inet rt_emergency input { type filter hook input priority -1000\; policy accept\; } 2>/dev/null
-    
-    # Rule 1: Drop Malformed Headers (IP Options / Wrong Length)
-    # [FIXED] Originally @nh,0,4 (Version). Changed to @nh,4,4 (IHL) or native 'ip ihl'.
-    # We use native 'ip ihl' here as it is safer and cleaner than bit offsets.
-    nft add rule inet rt_emergency input ip version 4 ip ihl != 5 drop 2>/dev/null
 
-    # Rule 2: Drop Bogus TCP Options (Botnet Signature)
-    # Checks for specific byte pattern at offset 34 in TCP header.
-    # @th = Transport Header. Offset 272 bits (34 bytes). Length 16 bits. Value 0x40.
-    nft add rule inet rt_emergency input tcp flags syn @th,272,16 0x40 drop 2>/dev/null
+    # B. Create Dynamic Blacklist Set (The "Penalty Box")
+    # Types: IPv4 address. Flags: Dynamic (auto-update), Timeout (auto-expire).
+    nft add set inet rt_emergency flooders { type ipv4_addr\; flags dynamic, timeout\; timeout 10m\; } 2>/dev/null
 
-    # Rule 3: Dynamic Flood Triage (The "Money Maker" for NFT)
-    # If > 50 SYNs/sec from one IP, add to 'flooders' set for 10m and drop.
-	nft add set inet rt_emergency flooders { type ipv4_addr\; flags dynamic, timeout\; timeout 10m\; } 2>/dev/null
-    # Drop anyone already in the set
+    # C. Drop Malformed Headers (The "IHL" Check)
+    # NFT Native: Check if IP Header Length is NOT 5 (standard).
+    nft add rule inet filter input ip protocol tcp tcp flags \& \(syn\) == syn payload @th + 0 4 bytes & 0x000F0000 >> 16 == 0x5 drop
+
+    # D. Drop Bogus TCP Options (Botnet Signature)
+    # NFT Native: @th (Transport Header), Offset 272 bits (34*8), Length 16 bits.
+    nft add rule inet filter input ip protocol tcp payload @nh + 34 2 bytes & 0xFFFF == 0x40 drop
+
+    # E. Enforce Dynamic Blacklist
+    # If source IP is in 'flooders', drop immediately.
     nft add rule inet rt_emergency input ip saddr @flooders drop 2>/dev/null
-    # Check rate, add to set if exceeded
-    nft add rule inet rt_emergency input tcp flags syn limit rate 50/second burst 100 packets add @flooders { ip saddr } 2>/dev/null
 
-else
-    print "    > Detected IPtables. Applying legacy signatures..."
-    # Fallback for legacy systems (CentOS 7, etc)
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+    # F. Rate Limit & Punishment
+    # Relaxed to 100/second to match Global Auto-Tuner defaults.
+    nft add rule inet rt_emergency input tcp flags syn limit rate 100/second burst 150 packets add @flooders { ip saddr } 2>/dev/null
+
+    print "    > [Layer A] NFTables RT rules active."
 fi
-print "    [RT-Control] Triage Complete. Proceeding with installation..."
+
+# 3. LAYER B: Legacy IPtables (If available)
+# We execute this EVEN IF nft was found. This creates a redundant shield.
+# If the user flushes nftables but forgets iptables, these rules still hold.
+if command -v iptables >/dev/null 2>&1; then
+    print "    > [Layer B] IPtables binary found. Applying LEGACY signatures..."
+    
+    # 1. Malformed Headers
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP > /dev/null 2>&1
+    
+    # 2. Bogus TCP Options
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP > /dev/null 2>&1
+    
+    print "    > [Layer B] IPtables RT rules active."
+fi
 # ==============================================================================
 
 # #
