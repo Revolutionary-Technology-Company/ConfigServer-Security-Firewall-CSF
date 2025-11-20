@@ -69,7 +69,8 @@ echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf > /dev/null 2>
 sysctl -p > /dev/null 2>&1
 
 # 2. Detect Native NFTables vs Legacy IPtables
-if command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then
+# Forced to false to use IPTables
+if false; then
     print "    > Detected NFTables. Applying STRICT native filters..."
     
     # Create high-priority table (-1000 priority runs before everything)
@@ -515,7 +516,7 @@ else
     "$AUTOTUNE_DEST"
 
     # --- Setup Services & Crons ---
-    if test \`cat /proc/1/comm\` = "systemd"; then
+    if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
         if [ -f "$GSB_POLLER_DEST" ]; then
             echo "    > Creating systemd service for Google Safe Sites Poller..."
             cat << EOF > "$GSB_SERVICE_FILE"

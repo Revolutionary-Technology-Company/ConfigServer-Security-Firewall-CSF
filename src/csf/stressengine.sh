@@ -84,7 +84,7 @@ if [ "$MODE" == "NFTABLES" ]; then
         }
 
         chain rt_synproxy {
-            synproxy roughen tcp mss 1460 wscale 80 sack yes timestamp yes accept
+            synproxy tcp mss 1460 wscale 80 sack yes timestamp yes accept
         }
 
         chain input {
