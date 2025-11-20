@@ -1,7 +1,8 @@
 #!/bin/sh
 #
-# Revolutionary Technology - Secure Boot Module Signer (v3)
+# Revolutionary Technology - Secure Boot Module Signer (v3.1)
 # Cross-compatible (RHEL/CentOS/Debian/Ubuntu)
+# Updates: Added check to skip reboot if MOK is already enrolled
 #
 
 # --- Define Colors ---
@@ -76,27 +77,35 @@ for module in "${MODULES_TO_SIGN[@]}"; do
     if [ -z "$MODULE_PATH" ]; then
         echo -e "    ${yellowl}[WARN]${greym} Module $module not found. Skipping."
     else
-        # If module is compressed (.xz), we might need to decompress, sign, and recompress?
-        # Actually, sign-file handles .ko. sign-file usually doesn't handle .xz directly.
-        # For safety, we only sign .ko files. If distros compress them, they usually auto-sign or handle it.
         if [[ "$MODULE_PATH" == *.ko ]]; then
-             echo -e "    > Signing $module..."
+             # Only output if we are actually signing to keep logs clean
              "$SIGN_FILE" sha256 "$MOK_PRIV" "$MOK_DER" "$MODULE_PATH"
         fi
     fi
 done
 
-# 5. Stage the key for enrollment
-echo -e "    > Staging key for enrollment (mokutil)..."
-if ! mokutil --import "$MOK_DER"; then
-    echo -e "    ${redl}ERROR:${greym} mokutil --import failed. The key could not be staged."
-    echo "1" > /tmp/rt_sign_failed
-    exit 0
+# 5. Check enrollment status (FIXED LOGIC)
+echo -e "    > Verifying key enrollment status..."
+
+# mokutil --test returns 0 if the key is ALREADY enrolled, and non-zero if it is not.
+if mokutil --test "$MOK_DER" >/dev/null 2>&1; then
+    echo -e "    ${greenl}[OK]${greym} Key is already enrolled in Secure Boot."
+    echo -e "    ${greenl}[OK]${greym} Modules signed and ready. No reboot required."
+    # We do NOT create the reboot required flag here
+else
+    echo -e "    > Key is NOT enrolled. Staging for enrollment..."
+    
+    if ! mokutil --import "$MOK_DER"; then
+        echo -e "    ${redl}ERROR:${greym} mokutil --import failed. The key could not be staged."
+        echo "1" > /tmp/rt_sign_failed
+        exit 0
+    fi
+
+    echo -e "    ${yellowl}--- ACTION REQUIRED ---${end}"
+    echo -e "    A new password is required for the MOK enrollment."
+    echo -e "    You will be asked for this password ${yellowl}one time${end} during the reboot."
+    echo -e "    Please enter a new password now (it will not be echoed):"
+    
+    # Flag that a reboot is actually needed this time
+    echo "1" > /tmp/rt_reboot_required
 fi
-
-echo -e "    ${yellowl}--- ACTION REQUIRED ---${end}"
-echo -e "    A new password is required for the MOK enrollment."
-echo -e "    You will be asked for this password ${yellowl}one time${end} during the reboot."
-echo -e "    Please enter a new password now (it will not be echoed):"
-
-echo "1" > /tmp/rt_reboot_required
