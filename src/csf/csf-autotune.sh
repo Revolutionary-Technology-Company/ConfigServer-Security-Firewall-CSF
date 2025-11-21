@@ -180,6 +180,13 @@ load_required_modules() {
     fi
 }
 
+# ... existing lines ...
+TUNE_SETTINGS["CC6_LOOKUPS"]="1"
+TUNE_SETTINGS["LF_DISTFTP"]="5"
+TUNE_SETTINGS["PT_LIMIT"]="0" # CRITICAL: Disable old process tracking
+
+# [NEW] Enforce Microsoft Deal Compliance (15-week cycle)
+TUNE_SETTINGS["AUTO_UPDATES"]="0"
 
 # --- [UPGRADED] Full NIC Hardware Acceleration Function ---
 # Enables RPS (CPU load balancing) and true hardware offloads (GSO, TSO, etc.)
