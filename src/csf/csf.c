@@ -7,8 +7,8 @@
 	#   @download           https://download.configserver.shop
 	#   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 	#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+	#                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+	#                       Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
 	#                       Copyright (C) 2006-2025 Jonathan Michaelson
 	#                       Copyright (C) 2006-2025 Way to the Web Ltd.
 	#   @license            GPLv3
@@ -18,22 +18,16 @@
 	#   it under the terms of the GNU General Public License as published by
 	#   the Free Software Foundation; either version 3 of the License, or (at
 	#   your option) any later version.
-	#   
-	#   This program is distributed in the hope that it will be useful, but
-	#   WITHOUT ANY WARRANTY; without even the implied warranty of
-	#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-	#   General Public License for more details.
-	#   
-	#   You should have received a copy of the GNU General Public License
-	#   along with this program; if not, see <https://www.gnu.org/licenses>.
 	# #
 */
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
 #include <pwd.h>
-main ()
+
+int main(void)
 {
 	FILE *adminFile;
 	FILE *resellerFile;
@@ -54,17 +48,17 @@ main ()
 		{
 			int end = strlen(name) - 1;
 			if (end >= 0 && name[end] == '\n') name[end] = '\0';
-			//printf("Name [%s]\n", name);
 			if (strcmp(pw->pw_name, name) == 0) admin = 1;
 		}
 		fclose(adminFile);
 	}
+
 	if (admin == 1)
 	{
 		setuid(0);
 		setgid(0);
-
-		execv("/usr/local/directadmin/plugins/csf/exec/da_csf.cgi", NULL);
+        // Use execl for safer argument handling on modern Linux
+		execl("/usr/local/directadmin/plugins/csf/exec/da_csf.cgi", "da_csf.cgi", (char *)0);
 	} else {
 		resellerFile=fopen ("/usr/local/directadmin/data/admin/reseller.list","r");
 		if (resellerFile!=NULL)
@@ -73,7 +67,6 @@ main ()
 			{
 				int end = strlen(name) - 1;
 				if (end >= 0 && name[end] == '\n') name[end] = '\0';
-				//printf("Name [%s]\n", name);
 				if (strcmp(pw->pw_name, name) == 0)
 				{
 					reseller = 1;
@@ -86,8 +79,8 @@ main ()
 		{
 			setuid(0);
 			setgid(0);
-
-			execv("/usr/local/directadmin/plugins/csf/exec/da_csf_reseller.cgi", NULL);
+            // Use execl for safer argument handling on modern Linux
+			execl("/usr/local/directadmin/plugins/csf/exec/da_csf_reseller.cgi", "da_csf_reseller.cgi", (char *)0);
 		} else {
 			printf("Permission denied [User:%s UID:%d]\n", pw->pw_name, ruid);
 		}
