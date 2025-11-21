@@ -6,7 +6,9 @@
     @docs               https://docs.configserver.shop
     @download           https://download.configserver.shop
     @repo               https://github.com/orgs/Revolutionary-Technology-Company/
-    @copyright          Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
+    @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+                        Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+                        Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
                         Copyright (C) 2006-2025 Jonathan Michaelson
                         Copyright (C) 2006-2025 Way to the Web Ltd.
     @license            GPLv3
@@ -31,25 +33,29 @@ class Ctrl_Nodeworx_Configservercsf extends Ctrl_Nodeworx_Plugin
 
     protected function _init()
     {
-        chmod('/usr/local/interworx/plugins/configservercsf', 0711);
-        chmod('/usr/local/interworx/plugins/configservercsf/lib', 0711);
-        chmod('/usr/local/interworx/plugins/configservercsf/lib/index.pl', 0711);
-        chmod('/usr/local/interworx/plugins/configservercsf/lib/reseller.pl', 0711);
-	}
+        // Permissions should ideally be set by the installer (install.sh) rather than on every page load.
+        // Uncomment these only if you experience "Permission Denied" errors.
+        // chmod('/usr/local/interworx/plugins/configservercsf', 0711);
+        // chmod('/usr/local/interworx/plugins/configservercsf/lib', 0711);
+        // chmod('/usr/local/interworx/plugins/configservercsf/lib/index.pl', 0711);
+        // chmod('/usr/local/interworx/plugins/configservercsf/lib/reseller.pl', 0711);
+    }
 
     public function launchAction()
     {
-        $this->getView()->assign('title', 'Configservercsf Services');
+        // Branding: Updated title to match your DBA
+        $this->getView()->assign('title', 'ConfigServer Security & Firewall');
         $this->getView()->assign('template', 'admin');
     }
 
     public function indexAction()
     {
+        // This logic is sound for InterWorx
         if (IW::NW()->isReseller()) {
-	        $this->_getPlugin()->runReseller();
-		} else {
-	        $this->_getPlugin()->runAdmin();
-		}
+            $this->_getPlugin()->runReseller();
+        } else {
+            $this->_getPlugin()->runAdmin();
+        }
         exit;
     }
 }
