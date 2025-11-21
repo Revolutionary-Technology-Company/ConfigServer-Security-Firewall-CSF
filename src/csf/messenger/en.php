@@ -1,4 +1,11 @@
 <?php
+    /*
+    @app                ConfigServer Firewall & Security (CSF)
+    @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+                        Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+                        Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
+    @license            GPLv3
+    */
 	$lang = array(
 		"warning"            => "The firewall on this server is blocking your connection.",
 		"contact"            => "You need to contact the server owner or hosting provider for further information.",
