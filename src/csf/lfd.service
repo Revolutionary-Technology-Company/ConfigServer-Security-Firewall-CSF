@@ -1,5 +1,5 @@
 [Unit]
-Description=ConfigServer Firewall & Security - lfd
+Description=ConfigServer Security & Firewall - lfd (Revolutionary Technology)
 After=network.target csf.service
 
 [Service]
