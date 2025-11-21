@@ -29,6 +29,13 @@
 		All product updates and version checks for v2.15.xx now require
 		a valid serial KEY for authentication.
 		
+		* CRYPTO: Encryption Upgrade (US Govt Standard)
+          - Replaced legacy Blowfish_PP with Rijndael_PP (AES-256) for Cluster communication.
+          - Implemented "Smart Key" generation in installer:
+            - High-Performance servers generate 16384-bit RSA keys (Titanium Grade).
+            - Standard servers generate 4096-bit RSA keys (Military Grade).
+          - Removed all static SSL keys from distribution to ensure Zero-Trust architecture.
+		
 		CLEANUP: Codebase Sanitation
         * Removed legacy debugging files (perf.sh) and hardcoded paths.
         * Removed "Insider/Sponsor" licensing checks to fully open-source the release.
