@@ -6,7 +6,9 @@
     @docs               https://docs.configserver.shop
     @download           https://download.configserver.shop
     @repo               https://github.com/orgs/Revolutionary-Technology-Company/
-    @copyright          Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
+    @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+                        Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+                        Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
                         Copyright (C) 2006-2025 Jonathan Michaelson
                         Copyright (C) 2006-2025 Way to the Web Ltd.
     @license            GPLv3
@@ -31,15 +33,16 @@ class Plugin_Configservercsf extends Plugin
 
     public function preAction($ctrl_act, Ctrl_Abstract $Ctrl, $action, $params)
     {
+        // Blocks the default InterWorx firewall UI to prevent conflicts
         if ($ctrl_act === 'Ctrl_Nodeworx_Firewall:index') {
             throw new IWorx_Exception_ActionBlocked('ConfigServer Plugins > Security & Firewall, has replaced this item');
         }
-		elseif (strpos($ctrl_act, 'Ctrl_Nodeworx_Firewall') === 0) {
-			throw new IWorx_Exception_ActionBlocked('N/A');
-		}
+        elseif (strpos($ctrl_act, 'Ctrl_Nodeworx_Firewall') === 0) {
+            throw new IWorx_Exception_ActionBlocked('N/A');
+        }
     }
 
-	public function getCategory()
+    public function getCategory()
     {
         return Plugin_Category::ADVANCED;
     }
@@ -57,13 +60,14 @@ class Plugin_Configservercsf extends Plugin
         $cmd = Ini::get(Ini::IWORX_BIN, 'runasuser');
 
         $user = 'root';
+        // Points to the modernized Perl script
         $cmd .= " {$user} custom /usr/local/interworx/plugins/configservercsf/lib/reseller.pl 2>&1";
 
         $InterWorx   = IW::Env()->getActiveSession()->getInterWorx();
-		$WorkingUser = $InterWorx->getWorkingUser();
-		putenv('REMOTE_USER=' . $WorkingUser->getNickname());
+        $WorkingUser = $InterWorx->getWorkingUser();
+        putenv('REMOTE_USER=' . $WorkingUser->getNickname());
 
-		putenv('QUERY_STRING=' . http_build_query($_GET));
+        putenv('QUERY_STRING=' . http_build_query($_GET));
         putenv('REQUEST_METHOD=' . $_SERVER['REQUEST_METHOD']);
 
         putenv('REMOTE_ADDR=' . $_SERVER['REMOTE_ADDR']);
@@ -71,22 +75,23 @@ class Plugin_Configservercsf extends Plugin
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             putenv('CONTENT_LENGTH=' . $_SERVER['CONTENT_LENGTH']);
+            // Passes POST data to the Perl script via environment variables
             putenv('POST=' . http_build_query($_POST));
             putenv('HTTP_RAW_POST_DATA=' . http_build_query($_POST));
         }
 
         IWorxExec::exec($cmd, $result, $retval, IWorxExec::STDERR_2_STDOUT);
-		$header = 1;
-		foreach ($result as $line) {
-			if ($header) {
-				header ("$line\n");
-			} else {
-				print "$line\n";
-			}
-			if ($header && $line == "") {
-				$header = 0;
-			}
-		}
+        $header = 1;
+        foreach ($result as $line) {
+            if ($header) {
+                header ("$line\n");
+            } else {
+                print "$line\n";
+            }
+            if ($header && $line == "") {
+                $header = 0;
+            }
+        }
     }
 
     public function runAdmin()
@@ -97,6 +102,7 @@ class Plugin_Configservercsf extends Plugin
         $cmd = Ini::get(Ini::IWORX_BIN, 'runasuser');
 
         $user = 'root';
+        // Points to the modernized Perl script
         $cmd .= " {$user} custom /usr/local/interworx/plugins/configservercsf/lib/index.pl 2>&1";
 
         putenv('QUERY_STRING=' . http_build_query($_GET));
@@ -112,21 +118,22 @@ class Plugin_Configservercsf extends Plugin
         }
 
         IWorxExec::exec($cmd, $result, $retval, IWorxExec::STDERR_2_STDOUT);
-		$header = 1;
-		foreach ($result as $line) {
-			if ($header) {
-				header ("$line\n");
-			} else {
-				print "$line\n";
-			}
-			if ($header && $line == "") {
-				$header = 0;
-			}
-		}
+        $header = 1;
+        foreach ($result as $line) {
+            if ($header) {
+                header ("$line\n");
+            } else {
+                print "$line\n";
+            }
+            if ($header && $line == "") {
+                $header = 0;
+            }
+        }
     }
 
     public function updateNodeworxMenu(IWorxMenuManager $MenuMan)
     {
+        // DBA Branding: ConfigServer Plugins
         $new_data = array( 'text' => 'ConfigServer Plugins',
                        'class' => 'iw-i-plugin',
                        'disabled_for_reseller' => '0' );
@@ -137,7 +144,7 @@ class Plugin_Configservercsf extends Plugin
             $new_data
         );
 
-		$new_data = array( 'text' => 'Security & Firewall',
+        $new_data = array( 'text' => 'Security & Firewall',
                        'url' => '/nodeworx/configservercsf?action=launch',
                        'parent' => 'menu-configserver',
                        'class' => 'iw-i-plugin',
