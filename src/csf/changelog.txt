@@ -1,5 +1,3 @@
-ChangeLog:
-
 2.15.07 - Revolutionary Technology offers three distinct product lines:
 
 		**Version 15.0 The original legacy release from configserver.com.
@@ -30,6 +28,42 @@ ChangeLog:
 		version_check.php) to validate purchases.
 		All product updates and version checks for v2.15.xx now require
 		a valid serial KEY for authentication.
+		
+		CLEANUP: Codebase Sanitation
+        * Removed legacy debugging files (perf.sh) and hardcoded paths.
+        * Removed "Insider/Sponsor" licensing checks to fully open-source the release.
+        * Standardized uninstaller logic to cleanly remove all new XDP services.
+		
+		RHEL 8+ Modernization & Branding Update
+        * Updated cPanel Driver (ConfigServercsf.pm) for RHEL 8/9 compatibility:
+          - Replaced legacy @ISA inheritance with modern `use parent` pragma.
+          - Added `use warnings` to enforce strict coding standards and prevent deprecated feature errors.
+          - Improved robustness of VERSION dependency linking between driver and META files.
+        * Updated META.pm to reflect "Revolutionary Technology" as the official Vendor.
+        * Updated copyright headers in csf.cgi and core files to include Dr. Correo Hofstad.
+        * Updated all repository and shop URLs to https://configserver.shop.
+        * Verified DBA usage of "ConfigServer Security & Firewall" trade name within UI elements.
+		
+		UPDATE: Modern Linux Kernel Support
+        * Updated all auto-configuration scripts (auto.pl, etc.) to correctly detect
+          and support Linux Kernels 4.x, 5.x, and 6.x.
+        * Ensures USE_CONNTRACK is properly enabled on modern distributions.
+
+        UPDATE: Universal Installer Improvements
+        * Added automatic detection and installation of XDP/eBPF toolchains (bpftool,
+          xdp-tools) for RHEL, CentOS, AlmaLinux, Debian, Ubuntu, Arch, and SUSE.
+        * Fixed systemd detection logic syntax errors across all scripts.
+		
+		FEATURE: Added "Revolutionary Technology XDP Shield" (v3.1)
+        * Implements a high-performance "Steel Shield" at the network driver level.
+        * Uses eBPF/XDP to DROP all traffic by default before it reaches the OS.
+        * Automatically whitelists ports listed in TCP_IN/UDP_IN from csf.conf.
+        * Provides massive DDoS resilience by offloading filtering to the NIC.
+
+        FEATURE: Added Google IP Updater (rt-google-ip-updater.pl)
+        * Automatically fetches and whitelists official Google Bot/Crawler IPs and ASNs.
+        * Ensures SEO traffic is never blocked by the strict XDP Shield.
+        * Runs weekly via a randomized cron job.
 
 		Revolutionary Technology's Hardware offloading engine activates
 		NIC microprocessors to handle all packet filtering. This frees server CPU
