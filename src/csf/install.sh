@@ -63,14 +63,17 @@ echo -n "Installing UI components..."
 # UI Assets
 if [ ! -d "/etc/csf/ui" ]; then mkdir -p /etc/csf/ui; fi
 cp -af ui/* /etc/csf/ui/
-# Generate fresh SSL keys if they don't exist
+
+# Generate fresh SSL keys (Smart Mode)
 if [ -f "make_ui_cert.sh" ]; then
-    sh make_ui_cert.sh >/dev/null 2>&1
+    echo ""
+    sh make_ui_cert.sh
     if [ -f "ui/server.crt" ]; then
         cp -af ui/server.crt /etc/csf/ui/
         cp -af ui/server.key /etc/csf/ui/
         chmod 600 /etc/csf/ui/server.key
     fi
+    echo -n "Resuming installation..."
 fi
 # Messenger Templates
 cp -af messenger/* /usr/local/csf/tpl/
