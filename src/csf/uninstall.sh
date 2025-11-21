@@ -24,8 +24,9 @@ IPSET=$(which ipset || echo "/usr/sbin/ipset")
 if $IPSET list -n "rt_google_safesites" &>/dev/null; then
     echo "Removing Google Safe Sites firewall rules..."
     $IPTABLES -D INPUT -m set --match-set rt_google_safesites src -j DROP >/dev/null 2>&1
-    $IPSET flush rt_google_safesites
-    $IPSET destroy rt_google_safesites
+	sleep 1
+	$IPSET flush rt_google_safesites
+	$IPSET destroy rt_google_safesites
 fi
 
 # Flush and remove Stress Engine chains
