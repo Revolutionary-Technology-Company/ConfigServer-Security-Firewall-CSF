@@ -8,7 +8,7 @@
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
 #                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+#                       Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
@@ -30,6 +30,7 @@
 ## no critic (RequireUseWarnings, ProhibitExplicitReturnUndef, ProhibitMixedBooleanOperators, RequireBriefOpen)
 # start main
 use strict;
+use warnings; # Added for RHEL 8+ stability
 use File::Find;
 use Fcntl qw(:DEFAULT :flock);
 use Sys::Hostname qw(hostname);
@@ -37,7 +38,6 @@ use IPC::Open3;
 use lib '/usr/local/csf/lib';
 use ConfigServer::DisplayUI;
 use ConfigServer::Config;
-
 our ($script, $images, $myv, %FORM, %in);
 
 # #
@@ -74,16 +74,6 @@ sub getCodename
 		$cname = "webmin";
 	}
 
-	# #
-    #	Optional debug output
-	# #
-
-	#	print "$cname\n";
-
-	# #
-    #	Return the value so it can be used in conditionals
-	# #
-
 	return $cname;
 }
 
@@ -106,10 +96,14 @@ do '../web-lib.pl';
 &ReadParse();
 %FORM = %in;
 
-if ($config{STYLE_CUSTOM} and $ENV{'REQUEST_URI'} =~ /xnavigation=1/ and $ENV{'HTTP_X_REQUESTED_WITH'} ne "XMLHttpRequest" and $ENV{'HTTP_X_PJAX'} ne "true") {redirect("/")}
+# RHEL 8 Fix: Ensure REQUEST_URI is defined
+my $req_uri = $ENV{'REQUEST_URI'} || "";
+my $req_with = $ENV{'HTTP_X_REQUESTED_WITH'} || "";
+my $req_pjax = $ENV{'HTTP_X_PJAX'} || "";
+
+if ($config{STYLE_CUSTOM} and $req_uri =~ /xnavigation=1/ and $req_with ne "XMLHttpRequest" and $req_pjax ne "true") {redirect("/")}
 
 print "Content-type: text/html\r\n\r\n";
-
 my $csfjs = qq{
 	<script>
 		var csfCodename = "$codename";
@@ -125,6 +119,10 @@ my @header;
 my @body;
 my @footer;
 my $bodytag;
+
+# Sanitize action
+$FORM{action} ||= "";
+
 my $htmltag = " data-post='$FORM{action}' ";
 if (-e "/etc/csf/csf.header") {
 	open (my $HEADER, "<", "/etc/csf/csf.header");
@@ -184,11 +182,9 @@ unless ($FORM{action} eq "tailcmd" or $FORM{action} =~ /^cf/ or $FORM{action} eq
 	print "	</script>\n";
 
 	print "	$bootstrapcss\n";
-
 	print " <link rel=\"preload\" href=\"\$images/configserver.css\" as=\"style\" onload=\"this.onload=null;this.rel='stylesheet'\">\n";
 	print " <noscript><link rel=\"stylesheet\" href=\"\$images/configserver.css\"></noscript>\n";
 	print "	<link rel=\"icon\" type=\"image/x-icon\" href=\"\$images/csf.png\">\n";
-
 	print "	<title>ConfigServer Security &amp; Firewall</title>\n";
 	print "	<meta charset='utf-8'>\n";
 	print "	<meta name='viewport' content='width=device-width, initial-scale=1'>\n";
@@ -229,7 +225,6 @@ unless ($FORM{action} eq "tailcmd" or $FORM{action} =~ /^cf/ or $FORM{action} eq
 }
 
 ConfigServer::DisplayUI::main(\%FORM, $script, 0, $images, $myv);
-
 unless ($FORM{action} eq "tailcmd" or $FORM{action} =~ /^cf/ or $FORM{action} eq "logtailcmd" or $FORM{action} eq "loggrepcmd") {
 	print "<a class='botlink' id='botlink' title='Go to top'><span class='glyphicon glyphicon-hand-up'></span></a>\n";
 	print "<script>\n";
