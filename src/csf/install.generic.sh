@@ -591,7 +591,7 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.generic.pl
 ./auto.generic.pl $OLDVERSION
 
-if test \`cat /proc/1/comm\` = "systemd"
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
 then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then

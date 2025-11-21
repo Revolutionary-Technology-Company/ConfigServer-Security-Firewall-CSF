@@ -595,7 +595,7 @@ chmod -v 755 /usr/local/directadmin/plugins/csf/scripts/*
 chown -v root:root /usr/local/directadmin/plugins/csf/exec/csf
 chmod -v 4755 /usr/local/directadmin/plugins/csf/exec/csf
 
-if test \`cat /proc/1/comm\` = "systemd"
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
 then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then

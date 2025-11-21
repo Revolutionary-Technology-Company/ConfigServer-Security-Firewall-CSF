@@ -594,7 +594,7 @@ chmod 700 /etc/cron.daily/csget
 chmod -v 700 auto.cyberpanel.pl
 ./auto.cyberpanel.pl $OLDVERSION
 
-if test \`cat /proc/1/comm\` = "systemd"; then
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then
             /sbin/chkconfig csf off

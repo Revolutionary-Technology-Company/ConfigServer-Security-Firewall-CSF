@@ -636,7 +636,7 @@ else
     chmod 600 /var/cpanel/apps/csf.conf
 fi
 
-if test \`cat /proc/1/comm\` = "systemd"
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
 then
     if [ -e /etc/init.d/lfd ]; then
         if [ -f /etc/redhat-release ]; then
