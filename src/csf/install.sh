@@ -12,7 +12,7 @@
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
-#   @updated            11.15.2025
+#   @updated            11.19.2025
 # #
 
 # #
@@ -100,6 +100,11 @@ GOOGLE_IP_SCRIPT="rt-google-ip-updater.pl"
 GOOGLE_IP_DEST="/usr/local/sbin/rt-google-ip-updater.pl"
 GOOGLE_IP_CRON="/etc/cron.d/rt-google-ip-updater"
 # --- [END UPDATED] ---
+
+# --- [NEW] XDP Shield ---
+XDP_LOADER_SCRIPT="csf-xdp-loader.sh"
+XDP_LOADER_DEST="/usr/local/sbin/csf-xdp-loader.sh"
+XDP_SERVICE_FILE="/etc/systemd/system/csf-xdp-loader.service"
 
 
 # #
@@ -521,7 +526,8 @@ else
             chmod +x "$GSB_POLLER_DEST"
             print "    [OK] Google Safe Sites Poller (Defense) installed to $GSB_POLLER_DEST"
             
-            if test \`cat /proc/1/comm\` = "systemd"; then
+            # FIX: Added proper systemd check syntax with error suppression
+            if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
                 echo "    > Creating systemd service for Google Safe Sites Poller..."
                 cat << EOF > "$GSB_SERVICE_FILE"
 [Unit]
@@ -552,39 +558,6 @@ EOF
     fi
 
     # --- Install Google Block Reporter ---
-	# This script runs as a cron job to report malicious domains
-	# (discovered via rDNS from blocked IPs) to the Google Web Risk API
-	# as a community defense contribution. This tools is ONLY intended for use in notifying
-	# network administrators that a malicious attack has come from their network. Some
-	# malicious connections come from innocent shared hosts. Shared hosts will be notified
-	# with this reporter, that a bad actor exists on their network. This is not designed
-	# to block or prevent legitimate traffic.
-	#
-	# Google's Safe Browsing technology constantly checks reported safe and unsafe websites to verify threats.
-	# It uses AI and machine learning to scan billions of URLs daily, identifies malicious scripts and content, 
-	# and adds dangerous sites to a list that major browsers use to warn users. If a site is flagged, a website
-	# owner can use Google Search Console to request a review after cleaning up the site. 
-	# How Google checks websites
-	#
-	# Daily scanning: Google scans its web index daily, and its Safe Browsing technology checks billions
-	# of URLs each day for unsafe websites.
-	# Automated analysis: Artificial intelligence (AI) is used to identify patterns of fraudulent content,
-	# distinguishing legitimate from harmful sites at scale.
-	# Threat detection: The checks are designed to find malicious scripts, downloads, viruses, and 
-	# content that violates policies.
-	# Real-time checks: Safe Browsing performs real-time checks against lists of known phishing and 
-	# malware sites and can even perform deeper scans on downloaded files. 
-	#
-	# What happens to reported sites
-	#
-	# Sites are flagged or blocked: When a dangerous site is detected, it can be labeled as dangerous
-	# in search results or added to the Safe Browsing list, which browsers use to warn users.
-	# Owners can request a review: If a website is flagged, the owner can go to the Security issues section
-	# in Google Search Console and request a review after they have cleaned up the site. 
-	#
-	# Check the status of a website on Google Safe Sites: https://transparencyreport.google.com/safe-browsing/search
-	# Why would a page be reported to Google Sage Sites? https://support.google.com/webmasters/answer/6347750?hl=en
-	#
     if [ ! -f "$BLOCK_REPORTER_SCRIPT" ]; then
         print "    ${redl}[ERROR]${greym} $BLOCK_REPORTER_SCRIPT not found. Skipping Block Reporter."
     else
@@ -625,8 +598,46 @@ EOF
             print "    ${redl}[ERROR]${greym} Failed to copy $GOOGLE_IP_SCRIPT."
         fi
     fi
-    
-fi # [FIX] This 'fi' was missing, causing the 'else' error.
+
+    # --- [NEW] Install XDP Shield Loader ---
+    if [ ! -f "$XDP_LOADER_SCRIPT" ]; then
+         print "    ${redl}[ERROR]${greym} $XDP_LOADER_SCRIPT not found. Skipping XDP Shield."
+    else
+        cp "$XDP_LOADER_SCRIPT" "$XDP_LOADER_DEST"
+        if [ $? -eq 0 ]; then
+            chmod 700 "$XDP_LOADER_DEST"
+            print "    [OK] XDP Shield Loader installed to $XDP_LOADER_DEST"
+            
+            # Create Service if systemd is present
+            if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
+                echo "    > Creating systemd service for XDP Shield..."
+                cat << EOF > "$XDP_SERVICE_FILE"
+[Unit]
+Description=Revolutionary Technology XDP DDoS Filter Loader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=$XDP_LOADER_DEST start
+ExecStop=$XDP_LOADER_DEST stop
+
+[Install]
+WantedBy=multi-user.target
+EOF
+                systemctl daemon-reload
+                systemctl enable "$(basename $XDP_SERVICE_FILE)" >/dev/null 2>&1
+                print "    [OK] XDP Shield service created and enabled."
+            else
+                print "    [WARN] systemd not found. XDP Shield service not created. Load manually."
+            fi
+        else
+             print "    ${redl}[ERROR]${greym} Failed to copy $XDP_LOADER_SCRIPT."
+        fi
+    fi
+
+fi 
 
 print ""
 # -------------------------------------------------------------------
