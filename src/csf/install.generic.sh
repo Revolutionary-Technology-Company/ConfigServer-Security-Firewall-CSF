@@ -162,8 +162,11 @@ mkdir -v -m 0600 /usr/local/csf
 mkdir -v -m 0600 /usr/local/csf/bin
 mkdir -v -m 0600 /usr/local/csf/lib
 mkdir -v -m 0600 /usr/local/csf/tpl
+mkdir -v -m 0600 /usr/local/csf/bpf
 
-# Revolutionary Technology Control
+# ==============================================================================
+# Revolutionary Technology Control [IMMEDIATE DDoS Mitigation for iptables]
+# ==============================================================================
 sysctl -w net.ipv4.tcp_syncookies=1
 echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
 sysctl -p
@@ -173,6 +176,127 @@ print "    Installing Revolutionary Technology pre-install scripts..."
 mkdir -p -m 0755 /usr/local/include/csf/pre.d/
 cp -avf stressengine.sh /usr/local/include/csf/pre.d/
 chmod -v 700 /usr/local/include/csf/pre.d/*.sh
+# ==============================================================================
+
+# --- [Revolutionary Tech] Install XDP Loader ---
+if [ -f "csf-xdp-loader.sh" ]; then
+    print "    Installing XDP Loader to /usr/local/sbin/..."
+    cp -avf csf-xdp-loader.sh /usr/local/sbin/
+    chmod 700 /usr/local/sbin/csf-xdp-loader.sh
+else
+    print "    ${yellowl}[WARN] csf-xdp-loader.sh not found in source directory.${greym}"
+fi
+
+# ==============================================================================
+# [Revolutionary Tech] XDP/eBPF & Kernel Toolchain Installation
+# ==============================================================================
+print "    Checking and installing Kernel Headers & BPF Toolchain..."
+
+# 1. Check Kernel Version (Must be >= 4.18 for reliable XDP)
+KERNEL_MAJOR=$(uname -r | cut -d. -f1)
+KERNEL_MINOR=$(uname -r | cut -d. -f2)
+
+if [ "$KERNEL_MAJOR" -lt 4 ] || ( [ "$KERNEL_MAJOR" -eq 4 ] && [ "$KERNEL_MINOR" -lt 18 ] ); then
+    print "    ${yellowl}[WARN] Kernel $(uname -r) is too old for XDP/BPF. Skipping tools.${greym}"
+else
+    print "    > Kernel $(uname -r) supports XDP/BPF. Proceeding..."
+
+    # 2. Detect OS and Install Packages
+    if [ -f /etc/redhat-release ]; then
+        # RHEL / CentOS / AlmaLinux / Rocky
+        print "    > Detected RHEL-family. Installing via yum/dnf..."
+        
+        # Ensure EPEL is present
+        if ! rpm -q epel-release >/dev/null 2>&1; then
+             yum install -y epel-release >/dev/null 2>&1
+        fi
+        
+        # Install Headers, BPF tools, and requested bpfilter packages
+        # Uses '|| print' to continue even if bpfilter-devel isn't in the repo yet
+        yum install -y kernel-devel-$(uname -r) bpftool xdp-tools bpfilter bpfilter-devel >/dev/null 2>&1 || print "    > (Note: Some specific BPF packages were skipped or not found, continuing...)"
+
+    elif [ -f /etc/debian_version ]; then
+        # Debian / Ubuntu
+        print "    > Detected Debian-family. Installing via apt..."
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y >/dev/null 2>&1
+        
+        # Install Headers (linux-headers) and tools
+        apt-get install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-tools-common xdp-tools bpftool bpfilter bpfilter-devel >/dev/null 2>&1 || print "    > (Note: Some specific BPF packages were skipped or not found, continuing...)"
+        
+    elif [ -f /etc/arch-release ]; then
+        # Arch Linux
+        print "    > Detected Arch Linux. Installing via pacman..."
+        pacman -Sy --noconfirm linux-headers bpftool xdp-tools bpfilter >/dev/null 2>&1
+        
+    elif [ -f /etc/SuSE-release ] || [ -f /etc/os-release ] && grep -q "ID.*suse" /etc/os-release; then
+        # OpenSUSE / SLES
+        print "    > Detected SUSE. Installing via zypper..."
+        zypper --non-interactive refresh >/dev/null 2>&1
+        zypper --non-interactive install kernel-devel bpftool xdp-tools bpfilter bpfilter-devel >/dev/null 2>&1
+    else
+        print "    ${yellowl}[WARN] Unsupported OS for automatic install. Please install 'kernel-devel' manually.${greym}"
+    fi
+
+    # 3. Verify XDP/BPF Readiness
+    if [ -d "/usr/src/kernels/$(uname -r)" ] || [ -d "/usr/src/linux-headers-$(uname -r)" ]; then
+        print "    ${greenl}[OK] Kernel headers found for $(uname -r). BPF compilation ready.${greym}"
+    else
+        print "    ${yellowl}[WARN] Kernel headers could not be verified. Custom BPF compilation may fail.${greym}"
+    fi
+
+    # 4. Install XDP Loader Service & Files
+    if command -v xdp-filter >/dev/null 2>&1; then
+        
+        # --- Install XDP Loader Script ---
+        if [ -f "csf-xdp-loader.sh" ]; then
+            print "    > Installing XDP Loader and Filter Logic..."
+            cp -avf csf-xdp-loader.sh /usr/local/sbin/csf-xdp-loader.sh
+            chmod 700 /usr/local/sbin/csf-xdp-loader.sh
+        else
+            print "    ${redl}[ERROR] csf-xdp-loader.sh not found in source directory.${greym}"
+        fi
+		
+	# --- [Revolutionary Tech] Install & Compile XDP Compiler ---
+	if [ -f "compile_xdp.sh" ]; then
+		print "    Installing XDP Compiler..."
+		cp -avf compile_xdp.sh /usr/local/csf/bin/compile_xdp.sh
+		chmod 700 /usr/local/csf/bin/compile_xdp.sh
+    
+		# Attempt compilation immediately
+		print "    > Compiling XDP Echo program..."
+		/usr/local/csf/bin/compile_xdp.sh
+		if [ $? -eq 0 ]; then
+			print "    [OK] XDP Echo program compiled successfully."
+		else
+			print "    ${yellowl}[WARN] XDP compilation failed. Check clang/llvm installation.${greym}"
+		fi
+	fi
+        
+        print "    > Creating persistent XDP loader service..."
+        cat <<EOF > /etc/systemd/system/csf-xdp-loader.service
+[Unit]
+Description=Revolutionary Technology XDP DDoS Filter Loader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/csf-xdp-loader.sh start
+ExecStop=/usr/local/sbin/csf-xdp-loader.sh stop
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl enable csf-xdp-loader.service >/dev/null 2>&1
+        print "    [OK] XDP Loader Service enabled."
+    else
+        print "    ${redl}[ERROR] xdp-filter binary not found. Skipping XDP service creation.${greym}"
+    fi
+fi
+# ==============================================================================
 
 if [ -e "/etc/csf/alert.txt" ]; then
 	sh migratedata.sh
