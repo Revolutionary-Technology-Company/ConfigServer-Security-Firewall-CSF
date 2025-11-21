@@ -11259,7 +11259,12 @@ sub lfdserver {
 	$clusterip = $childpid;
 	unless ($childpid) {
 		$childproc = "Cluster";
-		my $cipher = Crypt::CBC->new( -key => $config{CLUSTER_KEY}, -cipher => 'Blowfish_PP');
+		# Revolutionary Technology Encryption Standard (AES-256)
+	my $cipher = Crypt::CBC->new( 
+    -key    => $config{CLUSTER_KEY}, 
+    -cipher => 'Rijndael_PP', 
+    -header => 'random' 
+	);
 		my %cmembers;
 		foreach my $cip (split(/\,/,$config{CLUSTER_RECVFROM})) {$cmembers{$cip} = 1}
 		if ($config{CLUSTER_MASTER}) {$cmembers{$config{CLUSTER_MASTER}} = 1}
