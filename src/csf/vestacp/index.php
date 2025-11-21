@@ -7,9 +7,11 @@
 
 <?php
 /*
-    VestaCP migrated to React in their v1.0 update.
-    All pages are pre-compiled into .js / .css bundle and then pushed
-    to the VestaCP repo.
+    @app                ConfigServer Firewall & Security (CSF)
+    @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
+                        Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
+                        Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
+    @license            GPLv3
 */
 
 error_reporting(NULL);
@@ -31,8 +33,7 @@ top_panel(empty($_SESSION['look']) ? $_SESSION['user'] : $_SESSION['look'], $TAB
 
 ?>
     <div class="l-separator"></div>
-    <!-- /.l-separator -->
-	<div class="l-center units">
+    <div class="l-center units">
         <iframe scrolling='auto' name='myiframe' id='myiframe' src='frame.php' frameborder='0' width='100%' onload='resizeIframe(this);'></iframe>
 
         <script>
@@ -51,3 +52,4 @@ $_SESSION['back'] = $_SERVER['REQUEST_URI'];
 
 include($_SERVER['DOCUMENT_ROOT'].'/templates/scripts.html');
 include($_SERVER['DOCUMENT_ROOT'].'/templates/footer.html');
+?>

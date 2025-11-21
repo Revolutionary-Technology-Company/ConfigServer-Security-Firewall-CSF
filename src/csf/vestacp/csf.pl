@@ -8,7 +8,7 @@
 #   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
 #   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
 #                       Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#                       Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
+#                       Copyright (C) 2025-2026 Revolutionary Technology https://revolutionarytechnology.net
 #                       Copyright (C) 2006-2025 Jonathan Michaelson
 #                       Copyright (C) 2006-2025 Way to the Web Ltd.
 #   @license            GPLv3
@@ -29,6 +29,7 @@
 # #
 # start main
 use strict;
+use warnings; # Added for RHEL 8+ stability
 use File::Find;
 use Fcntl qw(:DEFAULT :flock);
 use Sys::Hostname qw(hostname);
@@ -73,16 +74,6 @@ sub getCodename
 		$cname = "webmin";
 	}
 
-	# #
-    #	Optional debug output
-	# #
-
-	#	print "$cname\n";
-
-	# #
-    #	Return the value so it can be used in conditionals
-	# #
-
 	return $cname;
 }
 
@@ -100,10 +91,15 @@ chomp $myv;
 $script = "/list/csf/frame.php";
 $images = "/list/csf/images";
 
-my $buffer = $ENV{'QUERY_STRING'};
-if ($buffer eq "") {$buffer = $ENV{POST}}
-if ($buffer eq "") {read(STDIN, $buffer,$ENV{'CONTENT_LENGTH'})}
+# RHEL 8 Fix: Safe environment handling
+my $buffer = $ENV{'QUERY_STRING'} || "";
+if ($buffer eq "") { $buffer = $ENV{POST} || "" }
+if ($buffer eq "") {
+    # Safe read with defined check
+    read(STDIN, $buffer, $ENV{'CONTENT_LENGTH'} || 0);
+}
 if ($buffer eq "") {foreach my $item (@ARGV) {$buffer .= $item."&"}}
+
 my @pairs = split(/&/, $buffer);
 foreach my $pair (@pairs) {
 	my ($name, $value) = split(/=/, $pair);
@@ -113,10 +109,6 @@ foreach my $pair (@pairs) {
 }
 
 print "content-type: text/html\n\n";
-
-#foreach my $key (keys %ENV) {
-#	print "$key = [$ENV{$key}]<br>\n";
-#}
 
 my $csfjs = qq{
 	<script>
@@ -128,6 +120,9 @@ my $bootstrapcss = "<link rel='stylesheet' href='$images/bootstrap/css/bootstrap
 my $csfnt = "<script src='$images/csfont.min.js'></script>";
 my $jqueryjs = "<script src='$images/jquery.min.js'></script>";
 my $bootstrapjs = "<script src='$images/bootstrap/js/bootstrap.min.js'></script>";
+
+# Initialize action to prevent warnings
+$FORM{action} ||= "";
 
 unless ($FORM{action} eq "tailcmd" or $FORM{action} =~ /^cf/ or $FORM{action} eq "logtailcmd" or $FORM{action} eq "loggrepcmd")
 {
