@@ -30,279 +30,189 @@
 
 	@note				Existing vars are replaced dynamically by Perl injection via DisplayUI.pm;
 						must remain var for global exposure and mutation safety.
-
-	@todo				Modify how this works later when there's more free time
 */
 
 var csfScript = '';
-var csfDuration = typeof csfDuration !== 'undefined' ? csfDuration : 6;
+var csfDuration = (typeof csfDuration !== 'undefined') ? csfDuration : 6;
+var csfStartPaused = (typeof csfStartPaused !== 'undefined') ? csfStartPaused : 0;
+
 var csfFromBot = 120;
 var csfFromRight = 10;
+
 let csfCounter;
 let csfCount = 1;
-var csfStartPaused = (typeof csfStartPaused !== 'undefined') ? csfStartPaused : 0;
 let csfPause = csfStartPaused;
 let csfTimerSet = 0;
 let csfHeight = 0;
 let csfWidth = 0;
-const csfAjaxHttp = csfCreateReqObject( );
+
+// Modern XMLHttpRequest setup
+const csfAjaxHttp = new XMLHttpRequest();
 
 /*
     Initial state of pause button
 */
-
-const pauseBtn = document.getElementById( 'csfPauseId' );
-if ( pauseBtn )
-{
-    pauseBtn.textContent = csfPause ? 'Continue' : 'Pause';
-}
-
-/*
-    Creates and returns a compatible XMLHttpRequest object
-*/
-
-function csfCreateReqObject( )
-{
-    let csfAjaxReq;
-
-    if ( window.XMLHttpRequest )
-    {
-        csfAjaxReq = new XMLHttpRequest( );
+document.addEventListener("DOMContentLoaded", function() {
+    const pauseBtn = document.getElementById('csfPauseId');
+    if (pauseBtn) {
+        pauseBtn.textContent = csfPause ? 'Continue' : 'Pause';
     }
-    else if ( window.ActiveXObject )
-    {
-        csfAjaxReq = new ActiveXObject( 'Microsoft.XMLHTTP' );
-    }
-    else
-    {
-        alert( 'There was a problem creating the XMLHttpRequest object in your browser' );
-        csfAjaxReq = '';
-    }
-
-    return csfAjaxReq;
-}
+});
 
 /*
     Sends an asynchronous GET request to the specified URL
 */
+function csfSendReq(url) {
+    const now = new Date();
+    const refreshIcon = document.getElementById('csfRefreshing');
+    
+    if(refreshIcon) refreshIcon.style.display = 'inline';
 
-function csfSendReq( url )
-{
-    const now = new Date( );
-
-    csfAjaxHttp.open( 'get', url + '&nocache=' + now.getTime( ) );
+    csfAjaxHttp.open('GET', url + '&nocache=' + now.getTime(), true);
+    
     csfAjaxHttp.onreadystatechange = csfHandleResp;
-    csfAjaxHttp.send( );
+    
+    csfAjaxHttp.onerror = function() {
+        console.error("CSF AJAX Error: Request failed.");
+        if(refreshIcon) refreshIcon.style.display = 'none';
+    };
 
-    document.getElementById( 'csfRefreshing' ).style.display = 'inline';
+    csfAjaxHttp.send();
 }
 
 /*
     Handles and processes the ajax response from the server
 */
+function csfHandleResp() {
+    if (csfAjaxHttp.readyState === 4) {
+        const refreshIcon = document.getElementById('csfRefreshing');
+        
+        if (csfAjaxHttp.status === 200) {
+            if (csfAjaxHttp.responseText) {
+                const csfObj = document.getElementById('csfAjax');
+                if (csfObj) {
+                    csfObj.innerHTML = csfAjaxHttp.responseText;
+                    
+                    // Enforce styles for Webmin/InterWorx compatibility
+                    csfObj.style.setProperty('min-height', '500px');
+                    csfObj.style.setProperty('resize', 'vertical', 'important');
+                    csfObj.style.setProperty('overflow', 'auto', 'important');
 
-function csfHandleResp( )
-{
-    if ( csfAjaxHttp.readyState == 4 && csfAjaxHttp.status == 200 )
-    {
-        if ( csfAjaxHttp.responseText )
-        {
+                    // Auto-scroll to bottom
+                    csfObj.scrollTop = csfObj.scrollHeight;
+                }
 
-            /*
-                I despise using !important, but we must do this to force
-                the minimum height and resize for Webmin.
-            */
+                if (refreshIcon) refreshIcon.style.display = 'none';
 
-            const csfObj = document.getElementById( 'csfAjax' );
-            csfObj.innerHTML = csfAjaxHttp.responseText;
-            csfObj.style.setProperty('min-height', '500px');
-            csfObj.style.setProperty('resize', 'vertical', 'important');
-            csfObj.style.setProperty('overflow', 'auto', 'important');
-
-            waitForElement( 'csfAjax', function( )
-            {
-                csfObj.scrollTop = csfObj.scrollHeight;
-            });
-
-            document.getElementById( 'csfRefreshing' ).style.display = 'none';
-
-            if ( csfTimerSet )
-                csfCounter = setInterval( csfTimerInitialize, 1000 );
+                if (csfTimerSet) {
+                    clearInterval(csfCounter); // Clear existing to prevent stacking
+                    csfCounter = setInterval(csfTimerInitialize, 1000);
+                }
+            }
+        } else {
+            console.warn("CSF AJAX Warning: Server returned status " + csfAjaxHttp.status);
+            if (refreshIcon) refreshIcon.style.display = 'none';
         }
     }
 }
 
 /*
-    Waits for an element to exist in the DOM, then executes a callback
-*/
-
-function waitForElement( elementId, callBack )
-{
-    window.setTimeout( function( )
-    {
-        const element = document.getElementById( elementId );
-
-        if ( element )
-            callBack( elementId, element );
-        else
-            waitForElement( elementId, callBack );
-
-    }, 500 );
-}
-
-/*
     Handles log grep requests using user input and selected options
 */
-
-function csfGrep( )
-{
+function csfGrep() {
     csfTimerSet = 0;
+    if (csfCounter) clearInterval(csfCounter);
 
-    const csfLogObj = document.getElementById( 'csfLogNum' );
-    let csfLogNum;
+    const csfLogObj = document.getElementById('csfLogNum');
+    let csfLogNum = csfLogObj ? '&lognum=' + csfLogObj.value : '';
 
-    if ( csfLogObj )
-        csfLogNum = '&lognum=' + csfLogObj.options[ csfLogObj.selectedIndex ].value;
-    else
-        csfLogNum = '';
+    if (document.getElementById('CSFgrep_i').checked) csfLogNum += '&grepi=1';
+    if (document.getElementById('CSFgrep_E').checked) csfLogNum += '&grepE=1';
+    if (document.getElementById('CSFgrep_Z').checked) csfLogNum += '&grepZ=1';
 
-    if ( document.getElementById( 'CSFgrep_i' ).checked )
-        csfLogNum += '&grepi=1';
-
-    if ( document.getElementById( 'CSFgrep_E' ).checked )
-        csfLogNum += '&grepE=1';
-
-    if ( document.getElementById( 'CSFgrep_Z' ).checked )
-        csfLogNum += '&grepZ=1';
-
-    const csfUrl = csfScript + '&grep=' + document.getElementById( 'csfGrep' ).value + csfLogNum;
-    csfSendReq( csfUrl );
+    const grepVal = encodeURIComponent(document.getElementById('csfGrep').value);
+    const csfUrl = csfScript + '&grep=' + grepVal + csfLogNum;
+    
+    csfSendReq(csfUrl);
 }
 
 /*
     Timer › Initialize
-
     Automatically refreshes on-screen logs at regular intervals
 */
-
-function csfTimerInitialize( ) 
-{
+function csfTimerInitialize() {
     csfTimerSet = 1;
-
-    const timerEl = document.getElementById( 'csfTimer' );
-    if ( !timerEl ) return;
+    const timerEl = document.getElementById('csfTimer');
+    
+    if (!timerEl) return;
 
     /*
-        Ensure interval is only set once
+        If paused, just update the display and skip decrement
     */
-
-    if ( !csfCounter )
-    {
-        csfCounter = setInterval( function( )
-        {
-            /*
-                If paused, just update the display and skip decrement
-            */
-
-            if ( csfPause )
-            {
-                timerEl.textContent = 'Paused';
-                return;
-            }
-
-            csfCount--;
-            timerEl.textContent = csfCount;
-
-            if ( csfCount <= 0 )
-            {
-                const logObj = document.getElementById( 'csfLogNum' );
-                const linesVal = document.getElementById( 'csfLines' ).value;
-                const logNum = logObj ? `&lognum=${ logObj.value }` : '';
-
-                csfSendReq( `${ csfScript }&lines=${ linesVal }${ logNum }` );
-                csfCount = csfDuration;
-            }
-        }, 1000 );
+    if (csfPause) {
+        timerEl.textContent = 'Paused';
+        return;
     }
 
-    /*
-        Initialize display
-    */
+    csfCount--;
+    timerEl.textContent = csfCount;
 
-    timerEl.textContent = csfPause ? 'Paused' : csfCount;
+    if (csfCount <= 0) {
+        const logObj = document.getElementById('csfLogNum');
+        const linesObj = document.getElementById('csfLines');
+        
+        if(linesObj) {
+            const linesVal = linesObj.value;
+            const logNum = logObj ? `&lognum=${ logObj.value }` : '';
+            csfSendReq(`${ csfScript }&lines=${ linesVal }${ logNum }`);
+        }
+        csfCount = csfDuration;
+    }
 }
 
 /*
     Timer › Pause
-
     Toggles the automatic refresh pause state and updates button text
 */
+function csfTimerPause() {
+    csfPause = !csfPause; // Toggle boolean
 
-function csfTimerPause( )
-{
-    /*
-        Toggle pause state
-    */
-
-    csfPause = csfPause ? 0 : 1;
-
-    /*
-        Update button label
-    */
-
-    const pauseBtn = document.getElementById( 'csfPauseId' );
-    if ( pauseBtn )
+    const pauseBtn = document.getElementById('csfPauseId');
+    if (pauseBtn) {
         pauseBtn.textContent = csfPause ? 'Continue' : 'Pause';
+        pauseBtn.className = csfPause ? 'btn btn-success' : 'btn btn-warning'; // Visual feedback if bootstrap exists
+    }
+    
+    // Immediate UI update
+    const timerEl = document.getElementById('csfTimer');
+    if (timerEl && csfPause) timerEl.textContent = 'Paused';
 }
 
 /*
     Timer › Refresh
-
     Forces an immediate refresh without waiting for timer to expire
 */
-
-function csfTimerRefresh( ) 
-{
-    /*
-        Temporarily unpause and run a one-time timer tick
-    */
-
-    const prevPause = csfPause;
-    csfPause = 0;
-    csfCount = 1;
-    csfTimerInitialize( );
-    csfPause = prevPause;
-
-    /*
-        Reset counter / update display
-    */
-
-    csfCount = csfDuration - 1;
-    const timerEl = document.getElementById( 'csfTimer' );
-    if ( timerEl ) timerEl.textContent = csfCount;
+function csfTimerRefresh() {
+    // Temporarily unpause to force a tick
+    const wasPaused = csfPause;
+    csfPause = false;
+    
+    // Reset count to trigger immediate fetch in next tick or manual call
+    csfCount = 0; 
+    csfTimerInitialize(); // Run immediately
+    
+    // Restore state and reset counter for next cycle
+    csfPause = wasPaused;
+    csfCount = csfDuration;
+    
+    const timerEl = document.getElementById('csfTimer');
+    if (timerEl) timerEl.textContent = csfCount;
 }
 
 /*
     Gets and stores the current browser window width and height
-
-	@note				Currently not utilized in main app
 */
-
-function windowSize( )
-{
-    if ( typeof( window.innerHeight ) == 'number' )
-    {
-        csfHeight = window.innerHeight;
-        csfWidth = window.innerWidth;
-    }
-    else if ( document.documentElement && ( document.documentElement.clientHeight ) )
-    {
-        csfHeight = document.documentElement.clientHeight;
-        csfWidth = document.documentElement.clientWidth;
-    }
-    else if ( document.body && ( document.body.clientHeight ) )
-    {
-        csfHeight = document.body.clientHeight;
-        csfWidth = document.body.clientWidth;
-    }
+function windowSize() {
+    csfHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+    csfWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
 }
