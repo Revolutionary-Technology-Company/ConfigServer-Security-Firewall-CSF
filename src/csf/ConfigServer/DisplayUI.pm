@@ -4532,13 +4532,8 @@ sub manualversion
         $url = "http://$config{DOWNLOADSERVER}/csf/version.txt";
     }
 
-    # Insiders Release Channel
-    if ( ( $config{SPONSOR_RELEASE_INSIDERS} // 0 ) == 1 && ( $config{SPONSOR_LICENSE} // '' ) ne '' )
-    {
-        $url .= "?channel=insiders&license=$config{SPONSOR_LICENSE}";
-    }
-
-    print "<div><pre class='comment' style='white-space: pre-wrap;'>\n";
+    # Revolutionary Technology Updates
+	print "<div><pre class='comment' style='white-space: pre-wrap;'>\n";
     print "Connecting to <a href='$url'>$url</a>\n";
     print "Fetching <code>csf/version.txt</code> from update server\n";
 

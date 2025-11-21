@@ -504,19 +504,6 @@ else
         fi
     fi
 
-    # --- [NEW] Install Update Script ---
-    if [ ! -f "$UPDATE_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $UPDATE_SCRIPT not found. Skipping."
-    else
-        cp "$UPDATE_SCRIPT" "$UPDATE_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$UPDATE_DEST"
-            print "    [OK] RT Update script installed to $UPDATE_DEST"
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $UPDATE_SCRIPT."
-        fi
-    fi
-
     # --- Install Google Safe Sites Poller (Defense) ---
     if [ ! -f "$GSB_POLLER_SCRIPT" ]; then
         print "    ${redl}[ERROR]${greym} $GSB_POLLER_SCRIPT not found. Skipping Google Safe Sites."
