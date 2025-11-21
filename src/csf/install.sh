@@ -106,6 +106,27 @@ XDP_SERVICE_FILE="/etc/systemd/system/csf-xdp-loader.service"
 XDP_SOURCE_FILE="xdp_echo.c"
 XDP_SOURCE_DEST="/usr/local/csf/bpf/xdp_echo.c"
 
+# --- 4. Install UI Assets (Titanium Stunt Mode Enabled) ---
+echo -n "Installing UI components..."
+# UI Assets
+if [ ! -d "/etc/csf/ui" ]; then mkdir -p /etc/csf/ui; fi
+cp -af ui/* /etc/csf/ui/
+
+# Generate fresh SSL keys if they don't exist
+if [ -f "make_ui_cert.sh" ]; then
+    echo ""
+    # We removed the silencer (>/dev/null) so you can see the Stunt Mode output!
+    sh make_ui_cert.sh
+    if [ -f "ui/server.crt" ]; then
+        cp -af ui/server.crt /etc/csf/ui/
+        cp -af ui/server.key /etc/csf/ui/
+        chmod 600 /etc/csf/ui/server.key
+    fi
+    echo -n "Resuming installation..."
+fi
+# Messenger Templates
+cp -af messenger/* /usr/local/csf/tpl/
+echo " done"
 
 # #
 #   Func › Usage Menu
