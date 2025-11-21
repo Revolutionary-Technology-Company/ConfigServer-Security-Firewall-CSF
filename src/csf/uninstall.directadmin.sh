@@ -3,10 +3,13 @@ echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
 # [DirectAdmin] Update service status
-sed -i 's/lfd=ON/lfd=OFF/' /usr/local/directadmin/data/admin/services.status
+if [ -f "/usr/local/directadmin/data/admin/services.status" ]; then
+    sed -i 's/lfd=ON/lfd=OFF/' /usr/local/directadmin/data/admin/services.status
+fi
 
 echo "Stopping dynamic services (LFD, NIC Accelerator, GSB, XDP Shield)..."
-if test `cat /proc/1/comm` = "systemd"; then
+# FIX: Added quotes to prevent 'too many arguments' error
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Stop all our services first to freeze the state
     systemctl stop lfd.service >/dev/null 2>&1
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
@@ -60,7 +63,7 @@ echo "Flushing main CSF firewall rules..."
 
 # --- Continue with standard file removal ---
 
-if test `cat /proc/1/comm` = "systemd"; then
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Services are already stopped, now disable and remove files
     echo "Disabling and removing systemd services..."
     systemctl disable csf.service >/dev/null 2>&1

@@ -3,7 +3,8 @@ echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
 echo "Stopping dynamic services (LFD, NIC Accelerator, GSB, XDP Shield)..."
-if test `cat /proc/1/comm` = "systemd"; then
+# FIX: Added quotes to prevent 'too many arguments' error
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Stop all our services first to freeze the state
     systemctl stop lfd.service >/dev/null 2>&1
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
@@ -57,7 +58,7 @@ echo "Flushing main CSF firewall rules..."
 
 # --- Continue with standard file removal ---
 
-if test `cat /proc/1/comm` = "systemd"; then
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Services are already stopped, now disable and remove files
     echo "Disabling and removing systemd services..."
     systemctl disable csf.service >/dev/null 2>&1
@@ -105,6 +106,9 @@ else
     rm -fv /etc/init.d/lfd
 fi
 
+# Remove chkservd integration (if present)
+rm -fv /etc/chkserv.d/lfd
+
 # Remove csf/lfd binaries and cron jobs
 echo "Removing binaries and cron jobs..."
 rm -fv /usr/sbin/csf
@@ -137,23 +141,25 @@ rm -fv /var/log/modsec_compat.log
 
 # [Interworx-specific] Remove plugin and UI
 echo "Removing Interworx UI and plugin..."
-/usr/local/interworx/bin/nodeworx.pex -u --controller Plugins --action edit --plugin_name configservercsf --status 0 -n
+if [ -x "/usr/local/interworx/bin/nodeworx.pex" ]; then
+    /usr/local/interworx/bin/nodeworx.pex -u --controller Plugins --action edit --plugin_name configservercsf --status 0 -n >/dev/null 2>&1
+fi
 rm -Rfv /usr/local/interworx/plugins/configservercsf /usr/local/interworx/html/configserver
 
 # [Interworx-specific] Restore original Interworx firewall (APF)
 echo "Restoring Interworx APF firewall..."
-chattr -ia /etc/apf/apf
-if [ -e "/etc/apf/apf.old" ]; then
-    cp -avf /etc/apf/apf.old /etc/apf/apf
-    chmod 750 /etc/apf/apf
+if [ -f "/etc/apf/apf" ]; then
+    chattr -ia /etc/apf/apf
+    if [ -e "/etc/apf/apf.old" ]; then
+        cp -avf /etc/apf/apf.old /etc/apf/apf
+        chmod 750 /etc/apf/apf
+    fi
 fi
 
 # Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."
 if [ -f /etc/csf/csf.allow ]; then
-    # This sed command removes the entire block between the markers
     sed -i '/^# BEGIN Revolutionary Technology Google IPs/,/^# END Revolutionary Technology Google IPs/d' /etc/csf/csf.allow > /dev/null 2>&1
-    # This removes any static ASN entries
     sed -i '/# Google ASN/d' /etc/csf/csf.allow > /dev/null 2>&1
 fi
 
@@ -163,11 +169,9 @@ rm -Rfv /etc/csf
 rm -Rfv /usr/local/csf
 rm -Rfv /var/lib/csf
 
-# [Revolutionary Tech Uninstall]
 # Remove custom pre-install script directory
 echo "Removing Revolutionary Technology pre-install scripts..."
 rm -Rfv /usr/local/include/csf
-# [End Revolutionary Tech Uninstall]
 
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."

@@ -1,287 +1,249 @@
 #!/bin/sh
-# #
+###############################################################################
+#
 #   @app                ConfigServer Firewall & Security (CSF)
 #                       Login Failure Daemon (LFD)
+#   @copyright          Copyright (C) 2025-2026 Revolutionary Technology
 #   @website            https://configserver.shop
-#   @docs               https://docs.configserver.shop
-#   @download           https://download.configserver.shop
-#   @repo               https://github.com/orgs/Revolutionary-Technology-Company/
-#   @copyright          Copyright (C) 2025-2026 Dr. Correo Hofstad
-#   @copyright          Copyright (C) 2025-2026 Dr. Cory 'Aetherinox' Hofstad Jr.
-#   @copyright          Copyright (C) 2025-2026 Revolutionary Technology Revolutionarytechnology.net
-#   @copyright          Copyright (C) 2006-2025 Jonathan Michaelson
-#   @copyright          Copyright (C) 2006-2025 Way to the Web Ltd.
-#   @license            GPLv3
-#   @updated            11.17.2025
-#   
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 3 of the License, or (at
-#   your option) any later version.
-#   
-#   This program is distributed in the hope that it will be useful, but
-#   WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
-# #
+#   @description        CyberPanel Installer for Revolutionary Technology CSF/LFD
+#
+###############################################################################
 
-# #
-#	v15.02
-#	
-#	Cyberpanel has opted to replace ConfigServer with their own in-house firewall.
-#	However, for users who wish to return to CSF; we will give them a solution
-# #
+echo "---------------------------------------------------------------"
+echo "Revolutionary Technology - ConfigServer Security & Firewall Installer"
+echo "Copyright (C) 2025-2026 Dr. Correo Hofstad"
+echo "---------------------------------------------------------------"
+echo ""
 
-umask 0177
-
-# #
-#	Allow for execution from different relative directories
-# #
-
-case $0 in
-    /*) script="$0" ;;                       # Absolute path
-    *)  script="$(pwd)/$0" ;;                # Relative path
-esac
-
-# #
-#	Find script directory
-# #
-
-script_dir=$(dirname "$script")
-
-# #
-#   Include global
-# #
-
-. "$script_dir/global.sh" ||
-{
-    echo "    Error: cannot source $script_dir/global.sh. Aborting." >&2
-    exit 1
-}
-
-if [ -e "/usr/local/cpanel/version" ]; then
-	echo "Running csf cPanel installer"
-	echo
-	sh install.cpanel.sh
-	exit 0
-elif [ -e "/usr/local/directadmin/directadmin" ]; then
-	echo "Running csf DirectAdmin installer"
-	echo
-	sh install.directadmin.sh
-	exit 0
-fi
-
-echo "Installing csf and lfd"
-echo
-
-echo "Check we're running as root"
+# --- 1. Root Check ---
 if [ ! `id -u` = 0 ]; then
-	echo
-	echo "FAILED: You have to be logged in as root (UID:0) to install csf"
-	exit
+    echo "FAILED: You have to be logged in as root (UID:0) to install csf"
+    exit
 fi
-echo
 
-mkdir -v -m 0600 /etc/csf
-cp -avf install.txt /etc/csf/
+# --- 2. Directory Setup ---
+echo -n "Creating directory structure..."
+mkdir -p -m 0600 /etc/csf
+mkdir -p -m 0600 /var/lib/csf/backup
+mkdir -p -m 0600 /var/lib/csf/Geo
+mkdir -p -m 0600 /var/lib/csf/ui
+mkdir -p -m 0600 /var/lib/csf/stats
+mkdir -p -m 0600 /var/lib/csf/lock
+mkdir -p -m 0600 /var/lib/csf/webmin
+mkdir -p -m 0600 /var/lib/csf/zone
+mkdir -p -m 0600 /usr/local/csf/bin
+mkdir -p -m 0600 /usr/local/csf/lib
+mkdir -p -m 0600 /usr/local/csf/tpl
+mkdir -p -m 0600 /usr/local/csf/bpf
+echo " done"
 
-echo "Checking Perl modules..."
-chmod 700 os.pl
-RETURN=`./os.pl`
-if [ "$RETURN" = 1 ]; then
-	echo
-	echo "FAILED: You MUST install the missing perl modules above before you can install csf. See /etc/csf/install.txt for installation details."
-    echo
-	exit
-else
-    echo "...Perl modules OK"
-    echo
-fi
-#
-# --- [Revolutionary Tech] Install Tarpit Dependencies & Sign Modules ---
-#
-print "    Installing Attacker Stress Engine (TARPIT) dependencies..."
-rm -f /tmp/rt_reboot_required /tmp/rt_tarpit_failed
+# ==============================================================================
+# PHASE 1: ENVIRONMENT SETUP & DEPENDENCIES
+# ==============================================================================
+echo "Checking and installing Dependencies..."
 
 if [ -f /usr/bin/apt-get ]; then
-    # --- This is a Debian or Ubuntu system ---
-    print "    > Detected apt package manager (Debian/Ubuntu)."
+    # Ubuntu (Common for CyberPanel)
+    echo "    > Detected apt (Ubuntu/Debian)."
     export DEBIAN_FRONTEND=noninteractive
-    # Install dependencies for signing and building
     apt-get update -y > /dev/null 2>&1
-    apt-get install xtables-addons-common xtables-addons-dkms openssl mokutil linux-headers-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
+    apt-get install -y xtables-addons-common xtables-addons-dkms openssl mokutil \
+                       linux-headers-$(uname -r) linux-tools-$(uname -r) linux-tools-common \
+                       xdp-tools bpftool bpfilter bpfilter-devel gcc make > /dev/null 2>&1
+    echo "    > Dependencies installed."
 
 elif [ -f /usr/bin/yum ]; then
-    # --- This is a Red Hat, CentOS, or AlmaLinux system ---
-    print "    > Detected yum package manager (RHEL/CentOS/AlmaLinux)."
-    yum install epel-release -y > /dev/null 2>&1
-    # Install dependencies for signing and building
-    yum install xtables-addons-kmod xtables-addons openssl mokutil kernel-devel-$(uname -r) -y > /dev/null 2>&1
-    print "    > Dependencies installed."
+    # Alma/CentOS (Common for CyberPanel)
+    echo "    > Detected yum (RHEL/CentOS)."
+    yum install -y epel-release > /dev/null 2>&1
+    yum install -y xtables-addons-kmod xtables-addons openssl mokutil \
+                   kernel-devel-$(uname -r) bpftool xdp-tools bpfilter bpfilter-devel gcc make > /dev/null 2>&1
+    echo "    > Dependencies installed."
 else
-    print "    ${redl}WARNING:${greym} Could not find apt or yum. Tarpit dependencies must be installed manually."
+    echo "    [WARN] Could not detect package manager. Skipping dependency install."
 fi
 
-# --- [Revolutionary Tech] Secure Boot Module Signing ---
-# This block checks if Secure Boot is on. If it is, it runs the signing script.
-print "    > Checking Secure Boot state..."
+# ==============================================================================
+# PHASE 2: IMMEDIATE MITIGATION & HARDENING
+# ==============================================================================
+echo "Applying Immediate Mitigation..."
+
+# Enable Syncookies
+sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
+if ! grep -q "net.ipv4.tcp_syncookies" /etc/sysctl.conf; then
+    echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.conf
+fi
+sysctl -p >/dev/null 2>&1
+
+# Drop invalid packets (u32 signatures)
+if command -v iptables >/dev/null 2>&1; then
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP 2>/dev/null
+    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP 2>/dev/null
+fi
+
+# ==============================================================================
+# PHASE 3: SECURE BOOT & MODULE SIGNING
+# ==============================================================================
+echo "Checking Secure Boot state..."
 if command -v mokutil >/dev/null 2>&1; then
     if mokutil --sb-state | grep -q "SecureBoot enabled"; then
-        print "    > Secure Boot is ENABLED. Running kernel module signer..."
+        echo "    > Secure Boot is ENABLED. Running kernel module signer..."
         if [ -f "rt-sign-module.sh" ]; then
             chmod 700 rt-sign-module.sh
             ./rt-sign-module.sh
-        else
-            print "    ${redl}ERROR:${greym} rt-sign-module.sh not found. Cannot sign modules."
         fi
     else
-        print "    > Secure Boot is disabled or not supported. Skipping module signing."
+        echo "    > Secure Boot disabled/not supported. Skipping signing."
     fi
-else
-    print "    > mokutil not found. Cannot determine Secure Boot state. Skipping module signing."
 fi
 
-# --- [Revolutionary Tech] Final Module Load Test ---
-print "    > Loading xt_TARPIT module..."
-if ! modprobe xt_TARPIT; then
-    print "    ${redl}WARNING:${greym} Failed to load xt_TARPIT module. Tarpit functionality may not work."
-    echo "1" > /tmp/rt_tarpit_failed
+# Load ECHO Module
+modprobe xt_ECHO 2>/dev/null
+if lsmod | grep -q xt_ECHO; then
+    echo "    [+] xt_ECHO module loaded."
 else
-    print "    ${greenl}[+] Tarpit module loaded successfully.${greym}"
-fi
-# --- [Revolutionary Tech] End Tarpit Block ---
-#
-
-mkdir -v -m 0600 /etc/csf
-mkdir -v -m 0600 /var/lib/csf
-mkdir -v -m 0600 /var/lib/csf/backup
-mkdir -v -m 0600 /var/lib/csf/Geo
-mkdir -v -m 0600 /var/lib/csf/ui
-mkdir -v -m 0600 /var/lib/csf/stats
-mkdir -v -m 0600 /var/lib/csf/lock
-mkdir -v -m 0600 /var/lib/csf/webmin
-mkdir -v -m 0600 /var/lib/csf/zone
-mkdir -v -m 0600 /usr/local/csf
-mkdir -v -m 0600 /usr/local/csf/bin
-mkdir -v -m 0600 /usr/local/csf/lib
-mkdir -v -m 0600 /usr/local/csf/tpl
-mkdir -v -m 0600 /usr/local/csf/bpf
-
-# ==============================================================================
-# Revolutionary Technology Control [IMMEDIATE DDoS Mitigation for iptables]
-# ==============================================================================
-sysctl -w net.ipv4.tcp_syncookies=1
-echo "net.ipv4.tcp_syncookies = 1" | sudo tee -a /etc/sysctl.conf
-sysctl -p
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP
-iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP
-print "    Installing Revolutionary Technology pre-install scripts..."
-mkdir -p -m 0755 /usr/local/include/csf/pre.d/
-cp -avf stressengine.sh /usr/local/include/csf/pre.d/
-chmod -v 700 /usr/local/include/csf/pre.d/*.sh
-# ==============================================================================
-
-# --- [Revolutionary Tech] Install XDP Loader ---
-if [ -f "csf-xdp-loader.sh" ]; then
-    print "    Installing XDP Loader to /usr/local/sbin/..."
-    cp -avf csf-xdp-loader.sh /usr/local/sbin/
-    chmod 700 /usr/local/sbin/csf-xdp-loader.sh
-else
-    print "    ${yellowl}[WARN] csf-xdp-loader.sh not found in source directory.${greym}"
+    echo "    [-] xt_ECHO not loaded. (XDP Shield will still protect ports)."
 fi
 
 # ==============================================================================
-# [Revolutionary Tech] XDP/eBPF & Kernel Toolchain Installation
+# PHASE 4: CORE INSTALLATION
 # ==============================================================================
-print "    Checking and installing Kernel Headers & BPF Toolchain..."
+echo -n "Installing core binaries and libraries..."
+cp -af install.txt /etc/csf/
+cp -af csf.pl /usr/sbin/csf
+cp -af lfd.pl /usr/sbin/lfd
+cp -af csf-autotune.sh /usr/sbin/csf-autotune
+cp -afR lib/* /usr/local/csf/lib/
 
-# 1. Check Kernel Version (Must be >= 4.18 for reliable XDP)
-KERNEL_MAJOR=$(uname -r | cut -d. -f1)
-KERNEL_MINOR=$(uname -r | cut -d. -f2)
+# Explicitly Install AES Crypto Module
+if [ -f "Rijndael_PP.pm" ]; then
+    mkdir -p /usr/local/csf/lib/Crypt
+    cp -af Rijndael_PP.pm /usr/local/csf/lib/Crypt/Rijndael_PP.pm
+    chmod 700 /usr/local/csf/lib/Crypt/Rijndael_PP.pm
+fi
 
-if [ "$KERNEL_MAJOR" -lt 4 ] || ( [ "$KERNEL_MAJOR" -eq 4 ] && [ "$KERNEL_MINOR" -lt 18 ] ); then
-    print "    ${yellowl}[WARN] Kernel $(uname -r) is too old for XDP/BPF. Skipping tools.${greym}"
-else
-    print "    > Kernel $(uname -r) supports XDP/BPF. Proceeding..."
+chmod 700 /usr/sbin/csf
+chmod 700 /usr/sbin/lfd
+chmod 700 /usr/sbin/csf-autotune
+chmod 700 /usr/local/csf/lib/ConfigServer/*
+echo " done"
 
-    # 2. Detect OS and Install Packages
-    if [ -f /etc/redhat-release ]; then
-        # RHEL / CentOS / AlmaLinux / Rocky
-        print "    > Detected RHEL-family. Installing via yum/dnf..."
-        
-        # Ensure EPEL is present
-        if ! rpm -q epel-release >/dev/null 2>&1; then
-             yum install -y epel-release >/dev/null 2>&1
-        fi
-        
-        # Install Headers, BPF tools, and requested bpfilter packages
-        # Uses '|| print' to continue even if bpfilter-devel isn't in the repo yet
-        yum install -y kernel-devel-$(uname -r) bpftool xdp-tools bpfilter bpfilter-devel >/dev/null 2>&1 || print "    > (Note: Some specific BPF packages were skipped or not found, continuing...)"
+# --- Install Configuration (CyberPanel Specifics) ---
+echo -n "Installing configuration files..."
+if [ ! -f "/etc/csf/csf.conf" ]; then
+    # Use CyberPanel specific config default
+    cp -af csf.cyberpanel.conf /etc/csf/csf.conf
+    sed -i 's/^TESTING = "0"/TESTING = "1"/' /etc/csf/csf.conf
+fi
+cp -af protection_*.conf /etc/csf/
+cp -af block_all_*.conf /etc/csf/
+cp -af disable_alerts.conf /etc/csf/
+cp -af csf.blocklists /etc/csf/
+cp -af csf.rbls /etc/csf/
+cp -af csf.rblconf /etc/csf/
+cp -af csf.resellers /etc/csf/ 2>/dev/null || touch /etc/csf/csf.resellers
 
-    elif [ -f /etc/debian_version ]; then
-        # Debian / Ubuntu
-        print "    > Detected Debian-family. Installing via apt..."
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y >/dev/null 2>&1
-        
-        # Install Headers (linux-headers) and tools
-        apt-get install -y linux-headers-$(uname -r) linux-tools-$(uname -r) linux-tools-common xdp-tools bpftool bpfilter bpfilter-devel >/dev/null 2>&1 || print "    > (Note: Some specific BPF packages were skipped or not found, continuing...)"
-        
-    elif [ -f /etc/arch-release ]; then
-        # Arch Linux
-        print "    > Detected Arch Linux. Installing via pacman..."
-        pacman -Sy --noconfirm linux-headers bpftool xdp-tools bpfilter >/dev/null 2>&1
-        
-    elif [ -f /etc/SuSE-release ] || [ -f /etc/os-release ] && grep -q "ID.*suse" /etc/os-release; then
-        # OpenSUSE / SLES
-        print "    > Detected SUSE. Installing via zypper..."
-        zypper --non-interactive refresh >/dev/null 2>&1
-        zypper --non-interactive install kernel-devel bpftool xdp-tools bpfilter bpfilter-devel >/dev/null 2>&1
-    else
-        print "    ${yellowl}[WARN] Unsupported OS for automatic install. Please install 'kernel-devel' manually.${greym}"
+# Copy CyberPanel-specific ignore files if not present
+if [ ! -f "/etc/csf/csf.ignore" ]; then cp -af csf.cyberpanel.ignore /etc/csf/csf.ignore; fi
+if [ ! -f "/etc/csf/csf.pignore" ]; then cp -af csf.cyberpanel.pignore /etc/csf/csf.pignore; fi
+if [ ! -f "/etc/csf/csf.allow" ]; then cp -af csf.cyberpanel.allow /etc/csf/csf.allow; fi
+
+# Add Google ASNs to allow list
+grep -q "ASN:15169" /etc/csf/csf.allow || echo "ASN:15169 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:36040" /etc/csf/csf.allow || echo "ASN:36040 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:43515" /etc/csf/csf.allow || echo "ASN:43515 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:36561" /etc/csf/csf.allow || echo "ASN:36561 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:19527" /etc/csf/csf.allow || echo "ASN:19527 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:139070" /etc/csf/csf.allow || echo "ASN:139070 # Google ASN" >> /etc/csf/csf.allow
+grep -q "ASN:396982" /etc/csf/csf.allow || echo "ASN:396982 # Google ASN" >> /etc/csf/csf.allow
+
+# Copy standard templates
+cp -af csf.dirwatch /etc/csf/
+cp -af csf.syslogs /etc/csf/
+cp -af csf.logfiles /etc/csf/
+cp -af csf.logignore /etc/csf/
+cp -af csf.rignore /etc/csf/
+cp -af csf.fignore /etc/csf/
+cp -af csf.signore /etc/csf/
+cp -af csf.suignore /etc/csf/
+cp -af csf.uidignore /etc/csf/
+cp -af csf.mignore /etc/csf/
+cp -af csf.sips /etc/csf/
+cp -af csf.dyndns /etc/csf/
+cp -af csf.syslogusers /etc/csf/
+cp -af csf.smtpauth /etc/csf/
+cp -af csf.cloudflare /etc/csf/
+
+echo " done"
+
+# --- Install UI Assets ---
+echo -n "Installing UI components..."
+cp -af ui/* /etc/csf/ui/
+if [ -f "make_ui_cert.sh" ]; then
+    sh make_ui_cert.sh >/dev/null 2>&1
+    if [ -f "ui/server.crt" ]; then
+        cp -af ui/server.crt /etc/csf/ui/
+        cp -af ui/server.key /etc/csf/ui/
+        chmod 600 /etc/csf/ui/server.key
     fi
+fi
+cp -af messenger/* /usr/local/csf/tpl/
+echo " done"
 
-    # 3. Verify XDP/BPF Readiness
-    if [ -d "/usr/src/kernels/$(uname -r)" ] || [ -d "/usr/src/linux-headers-$(uname -r)" ]; then
-        print "    ${greenl}[OK] Kernel headers found for $(uname -r). BPF compilation ready.${greym}"
-    else
-        print "    ${yellowl}[WARN] Kernel headers could not be verified. Custom BPF compilation may fail.${greym}"
-    fi
-
-    # 4. Install XDP Loader Service & Files
-    if command -v xdp-filter >/dev/null 2>&1; then
-        
-        # --- Install XDP Loader Script ---
-        if [ -f "csf-xdp-loader.sh" ]; then
-            print "    > Installing XDP Loader and Filter Logic..."
-            cp -avf csf-xdp-loader.sh /usr/local/sbin/csf-xdp-loader.sh
-            chmod 700 /usr/local/sbin/csf-xdp-loader.sh
-        else
-            print "    ${redl}[ERROR] csf-xdp-loader.sh not found in source directory.${greym}"
-        fi
-		
-	# --- [Revolutionary Tech] Install & Compile XDP Compiler ---
-	if [ -f "compile_xdp.sh" ]; then
-		print "    Installing XDP Compiler..."
-		cp -avf compile_xdp.sh /usr/local/csf/bin/compile_xdp.sh
-		chmod 700 /usr/local/csf/bin/compile_xdp.sh
+# ==============================================================================
+# PHASE 5: CYBERPANEL INTEGRATION
+# ==============================================================================
+echo "Integrating with CyberPanel..."
+if [ -d "/usr/local/CyberCP" ]; then
+    # Install UI Python Wrapper
+    cp -af cyberpanel/csf.py /usr/local/CyberCP/public/csf.py
+    chmod 700 /usr/local/CyberCP/public/csf.py
     
-		# Attempt compilation immediately
-		print "    > Compiling XDP Echo program..."
-		/usr/local/csf/bin/compile_xdp.sh
-		if [ $? -eq 0 ]; then
-			print "    [OK] XDP Echo program compiled successfully."
-		else
-			print "    ${yellowl}[WARN] XDP compilation failed. Check clang/llvm installation.${greym}"
-		fi
-	fi
-        
-        print "    > Creating persistent XDP loader service..."
-        cat <<EOF > /etc/systemd/system/csf-xdp-loader.service
+    # Install UI Assets
+    if [ -d "/usr/local/CyberCP/public" ]; then
+        mkdir -p /usr/local/CyberCP/public/csf_static
+        cp -af csf/csf_small.png /usr/local/CyberCP/public/csf_static/
+        cp -af csf/* /usr/local/CyberCP/public/csf_static/
+    fi
+    
+    echo "    [OK] CyberPanel UI installed."
+else
+    echo "    [WARN] CyberPanel directory not found. Skipping UI integration."
+fi
+
+# Run CyberPanel Auto-Configuration
+if [ -f "auto.cyberpanel.pl" ]; then
+    chmod 700 auto.cyberpanel.pl
+    # Get old version if exists
+    OLDVERSION=0
+    if [ -e "/etc/csf/version.txt" ]; then OLDVERSION=`head -n 1 /etc/csf/version.txt`; fi
+    ./auto.cyberpanel.pl $OLDVERSION
+fi
+echo " done"
+
+# ==============================================================================
+# PHASE 6: REVOLUTIONARY TECHNOLOGY TOOLS
+# ==============================================================================
+echo "Installing Revolutionary Technology Tools..."
+
+# 1. Stress Engine
+mkdir -p -m 0755 /usr/local/include/csf/pre.d/
+if [ -f "stressengine.sh" ]; then
+    cp -avf stressengine.sh /usr/local/include/csf/pre.d/
+    cp -avf stressengine.sh /usr/local/sbin/stressengine.sh
+    chmod 700 /usr/local/include/csf/pre.d/*.sh
+    chmod 700 /usr/local/sbin/stressengine.sh
+    echo "    [OK] Stress Engine installed."
+fi
+
+# 2. XDP Shield Loader
+if [ -f "csf-xdp-loader.sh" ]; then
+    cp "csf-xdp-loader.sh" "/usr/local/sbin/csf-xdp-loader.sh"
+    chmod 700 "/usr/local/sbin/csf-xdp-loader.sh"
+    
+    # Create Systemd Service
+    if [ -d "/etc/systemd/system" ]; then
+        cat << EOF > /etc/systemd/system/csf-xdp-loader.service
 [Unit]
 Description=Revolutionary Technology XDP DDoS Filter Loader
 After=network-online.target
@@ -298,1034 +260,119 @@ WantedBy=multi-user.target
 EOF
         systemctl daemon-reload
         systemctl enable csf-xdp-loader.service >/dev/null 2>&1
-        print "    [OK] XDP Loader Service enabled."
-    else
-        print "    ${redl}[ERROR] xdp-filter binary not found. Skipping XDP service creation.${greym}"
+        echo "    [OK] XDP Shield Service installed."
     fi
 fi
+
+# 3. Google IP Updater
+if [ -f "rt-google-ip-updater.pl" ]; then
+    cp "rt-google-ip-updater.pl" "/usr/local/sbin/rt-google-ip-updater.pl"
+    chmod 700 "/usr/local/sbin/rt-google-ip-updater.pl"
+    # Create Cron
+    echo "$(shuf -i 0-59) $(shuf -i 3-5) * * * root /usr/local/sbin/rt-google-ip-updater.pl > /dev/null 2>&1" > /etc/cron.d/rt-google-ip-updater
+    echo "    [OK] Google IP Updater installed."
+fi
+
+# 4. ModSec3 Bridge
+if [ -f "/var/log/modsec_audit.log" ] || [ -f "/var/log/httpd/modsec_audit.log" ] || [ -f "/usr/local/lsws/logs/modsec_audit.log" ]; then
+    cat << 'EOF' > /usr/local/sbin/modsec3_converter.pl
+#!/usr/bin/perl
+use strict;
+use warnings;
+use File::Tail;
+use JSON::MaybeXS;
+use Fcntl qw(:flock);
+use POSIX qw(strftime);
+my $MODSEC3_LOG = "/var/log/modsec_audit.json";
+my $CSF_COMPAT_LOG = "/var/log/modsec_compat.log";
+if (-f "/usr/local/lsws/logs/modsec_audit.log") { $MODSEC3_LOG = "/usr/local/lsws/logs/modsec_audit.log"; }
+elsif (-f "/var/log/httpd/modsec_audit.log") { $MODSEC3_LOG = "/var/log/httpd/modsec_audit.log"; }
+elsif (-f "/var/log/modsec_audit.log") { $MODSEC3_LOG = "/var/log/modsec_audit.log"; }
+open(my $out_fh, ">>", $CSF_COMPAT_LOG) or die "Cannot open output: $!";
+$out_fh->autoflush(1);
+my $json = JSON::MaybeXS->new(utf8 => 1, allow_nonref => 1);
+my $file = File::Tail->new(name => $MODSEC3_LOG, maxinterval => 5, adjustafter => 10);
+while (defined(my $line = $file->read)) {
+    my $data;
+    eval { $data = $json->decode($line); };
+    if ($@) { next; }
+    my $ip = $data->{'transaction'}->{'client_ip'};
+    my $msgs = $data->{'transaction'}->{'messages'} || [];
+    foreach my $msg (@$msgs) {
+         my $sev = $msg->{'details'}->{'severity'} // "INFO";
+         if ($sev eq "CRITICAL" || $sev eq "ERROR") {
+             my $t = strftime("%a %b %d %H:%M:%S %Y", localtime);
+             print $out_fh "[$t] [error] [client $ip] ModSecurity: " . ($msg->{'message'} || "") . "\n";
+         }
+    }
+}
+EOF
+    chmod 700 /usr/local/sbin/modsec3_converter.pl
+    
+    # Service
+    cat << EOF > /etc/systemd/system/modsec3-converter.service
+[Unit]
+Description=Revolutionary Technology: ModSecurity 3 Converter
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/modsec3_converter.pl
+Restart=always
+User=root
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable modsec3-converter.service >/dev/null 2>&1
+    # Update csf.conf to use new log
+    sed -i 's#^MODSEC_LOG = ".*"#MODSEC_LOG = "/var/log/modsec_compat.log"#' /etc/csf/csf.conf
+    echo "    [OK] ModSec3 Bridge installed."
+fi
+
+# ==============================================================================
+# PHASE 7: FINALIZATION (Service Registration)
 # ==============================================================================
 
-if [ -e "/etc/csf/alert.txt" ]; then
-	sh migratedata.sh
-fi
-
-if [ ! -e "/etc/csf/csf.conf" ]; then
-	cp -avf csf.cyberpanel.conf /etc/csf/csf.conf
-fi
-
-if [ ! -d /var/lib/csf ]; then
-	mkdir -v -p -m 0600 /var/lib/csf
-fi
-if [ ! -d /usr/local/csf/lib ]; then
-	mkdir -v -p -m 0600 /usr/local/csf/lib
-fi
-if [ ! -d /usr/local/csf/bin ]; then
-	mkdir -v -p -m 0600 /usr/local/csf/bin
-fi
-if [ ! -d /usr/local/csf/tpl ]; then
-	mkdir -v -p -m 0600 /usr/local/csf/tpl
-fi
-
-if [ ! -e "/etc/csf/csf.allow" ]; then
-	cp -avf csf.cyberpanel.allow /etc/csf/csf.allow
-fi
-
-# --- [UPDATED] Add Google ASNs to csf.allow ---
-print "    Adding Google ASNs to /etc/csf/csf.allow..."
-
-# We use grep -q to avoid adding duplicate entries on re-installation
-grep -q "ASN:15169" /etc/csf/csf.allow || echo "ASN:15169 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:36040" /etc/csf/csf.allow || echo "ASN:36040 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:43515" /etc/csf/csf.allow || echo "ASN:43515 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:36561" /etc/csf/csf.allow || echo "ASN:36561 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:19527" /etc/csf/csf.allow || echo "ASN:19527 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:139070" /etc/csf/csf.allow || echo "ASN:139070 # Google ASN" >> /etc/csf/csf.allow
-grep -q "ASN:396982" /etc/csf/csf.allow || echo "ASN:396982 # Google ASN" >> /etc/csf/csf.allow
-# --- [UPDATED] End Google ASN Block ---
-
-if [ ! -e "/etc/csf/csf.deny" ]; then
-	cp -avf csf.deny /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.redirect" ]; then
-	cp -avf csf.redirect /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.resellers" ]; then
-	cp -avf csf.resellers /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.dirwatch" ]; then
-	cp -avf csf.dirwatch /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.syslogs" ]; then
-	cp -avf csf.syslogs /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.logfiles" ]; then
-	cp -avf csf.logfiles /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.logignore" ]; then
-	cp -avf csf.logignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.blocklists" ]; then
-	cp -avf csf.blocklists /etc/csf/.
-else
-	cp -avf csf.blocklists /etc/csf/csf.blocklists.new
-fi
-if [ ! -e "/etc/csf/csf.ignore" ]; then
-	cp -avf csf.cyberpanel.ignore /etc/csf/csf.ignore
-fi
-if [ ! -e "/etc/csf/csf.pignore" ]; then
-	cp -avf csf.cyberpanel.pignore /etc/csf/csf.pignore
-fi
-if [ ! -e "/etc/csf/csf.rignore" ]; then
-	cp -avf csf.rignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.fignore" ]; then
-	cp -avf csf.fignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.signore" ]; then
-	cp -avf csf.signore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.suignore" ]; then
-	cp -avf csf.suignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.uidignore" ]; then
-	cp -avf csf.uidignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.mignore" ]; then
-	cp -avf csf.mignore /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.sips" ]; then
-	cp -avf csf.sips /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.dyndns" ]; then
-	cp -avf csf.dyndns /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.syslogusers" ]; then
-	cp -avf csf.syslogusers /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.smtpauth" ]; then
-	cp -avf csf.smtpauth /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.rblconf" ]; then
-	cp -avf csf.rblconf /etc/csf/.
-fi
-if [ ! -e "/etc/csf/csf.cloudflare" ]; then
-	cp -avf csf.cloudflare /etc/csf/.
-fi
-
-if [ ! -e "/usr/local/csf/tpl/alert.txt" ]; then
-	cp -avf alert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/reselleralert.txt" ]; then
-	cp -avf reselleralert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/logalert.txt" ]; then
-	cp -avf logalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/logfloodalert.txt" ]; then
-	cp -avf logfloodalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/syslogalert.txt" ]; then
-	cp -avf syslogalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/integrityalert.txt" ]; then
-	cp -avf integrityalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/exploitalert.txt" ]; then
-	cp -avf exploitalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/queuealert.txt" ]; then
-	cp -avf queuealert.txt /usr/local/csf/tpl/.
-fi
-#
-# --- [Revolutionary Tech] Set ModSecurity Log Path ---
-#
-if [ ! -z "$MODSEC_LOG_PATH" ]; then
-    print "    Setting MODSEC_LOG = \"${MODSEC_LOG_PATH}\" in /etc/csf/csf.conf..."
-    sed -i "s#^MODSEC_LOG = \".*\"#MODSEC_LOG = \"$MODSEC_LOG_PATH\"#" /etc/csf/csf.conf
-fi
-#
-# --- [Revolutionary Tech] End ModSecurity Log Path ---
-#
-if [ ! -e "/usr/local/csf/tpl/modsecipdbalert.txt" ]; then
-	cp -avf modsecipdbalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/tracking.txt" ]; then
-	cp -avf tracking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/connectiontracking.txt" ]; then
-	cp -avf connectiontracking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/processtracking.txt" ]; then
-	cp -avf processtracking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/accounttracking.txt" ]; then
-	cp -avf accounttracking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/usertracking.txt" ]; then
-	cp -avf usertracking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/sshalert.txt" ]; then
-	cp -avf sshalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/webminalert.txt" ]; then
-	cp -avf webminalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/sualert.txt" ]; then
-	cp -avf sualert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/sudoalert.txt" ]; then
-	cp -avf sudoalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/consolealert.txt" ]; then
-	cp -avf consolealert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/uialert.txt" ]; then
-	cp -avf uialert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/cpanelalert.txt" ]; then
-	cp -avf cpanelalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/scriptalert.txt" ]; then
-	cp -avf scriptalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/relayalert.txt" ]; then
-	cp -avf relayalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/filealert.txt" ]; then
-	cp -avf filealert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/watchalert.txt" ]; then
-	cp -avf watchalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/loadalert.txt" ]; then
-	cp -avf loadalert.txt /usr/local/csf/tpl/.
-else
-	cp -avf loadalert.txt /usr/local/csf/tpl/loadalert.txt.new
-fi
-if [ ! -e "/usr/local/csf/tpl/resalert.txt" ]; then
-	cp -avf resalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/portscan.txt" ]; then
-	cp -avf portscan.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/uidscan.txt" ]; then
-	cp -avf uidscan.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/permblock.txt" ]; then
-	cp -avf permblock.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/netblock.txt" ]; then
-	cp -avf netblock.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/portknocking.txt" ]; then
-	cp -avf portknocking.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/forkbombalert.txt" ]; then
-	cp -avf forkbombalert.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/recaptcha.txt" ]; then
-	cp -avf recaptcha.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/apache.main.txt" ]; then
-	cp -avf apache.main.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/apache.http.txt" ]; then
-	cp -avf apache.http.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/apache.https.txt" ]; then
-	cp -avf apache.https.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/litespeed.main.txt" ]; then
-	cp -avf litespeed.main.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/litespeed.http.txt" ]; then
-	cp -avf litespeed.http.txt /usr/local/csf/tpl/.
-fi
-if [ ! -e "/usr/local/csf/tpl/litespeed.https.txt" ]; then
-	cp -avf litespeed.https.txt /usr/local/csf/tpl/.
-fi
-cp -avf x-arf.txt /usr/local/csf/tpl/.
-
-# #
-#	Only creates pre and post autoloader if it doesn't exist in either location
-# #
-
-if [ ! -e "/usr/local/csf/bin/csfpre.sh" ] && [ ! -e "/etc/csf/csfpre.sh" ]; then
-	echo "No existing csfpre.sh found — installing a fresh copy..."
-    cp -avf csfpre.sh /usr/local/csf/bin/.
-else
-    echo "csfpre.sh already exists in one of the valid locations — skipping copy."
-fi
-
-if [ ! -e "/usr/local/csf/bin/csfpost.sh" ] && [ ! -e "/etc/csf/csfpost.sh" ]; then
-	echo "No existing csfpost.sh found — installing a fresh copy..."
-    cp -avf csfpost.sh /usr/local/csf/bin/.
-else
-    echo "csfpost.sh already exists in one of the valid locations — skipping copy."
-fi
-
-if [ ! -e "/usr/local/csf/bin/regex.custom.pm" ]; then
-	cp -avf regex.custom.pm /usr/local/csf/bin/.
-fi
-if [ ! -e "/usr/local/csf/bin/pt_deleted_action.pl" ]; then
-	cp -avf pt_deleted_action.pl /usr/local/csf/bin/.
-fi
-if [ ! -e "/etc/csf/messenger" ]; then
-	cp -avf messenger /etc/csf/.
-fi
-if [ ! -e "/etc/csf/messenger/index.recaptcha.html" ]; then
-	cp -avf messenger/index.recaptcha.html /etc/csf/messenger/.
-fi
-if [ ! -e "/etc/csf/ui" ]; then
-	cp -avf ui /etc/csf/.
-fi
-if [ -e "/etc/cron.d/csfcron.sh" ]; then
-	mv -fv /etc/cron.d/csfcron.sh /etc/cron.d/csf-cron
-fi
-if [ ! -e "/etc/cron.d/csf-cron" ]; then
-	cp -avf csfcron.sh /etc/cron.d/csf-cron
-fi
-if [ -e "/etc/cron.d/lfdcron.sh" ]; then
-	mv -fv /etc/cron.d/lfdcron.sh /etc/cron.d/lfd-cron
-fi
-if [ ! -e "/etc/cron.d/lfd-cron" ]; then
-	cp -avf lfdcron.sh /etc/cron.d/lfd-cron
-fi
-sed -i "s%/etc/init.d/lfd restart%/usr/sbin/csf --lfd restart%" /etc/cron.d/lfd-cron
-if [ -e "/usr/local/csf/bin/servercheck.pm" ]; then
-	rm -f /usr/local/csf/bin/servercheck.pm
-fi
-if [ -e "/etc/csf/cseui.pl" ]; then
-	rm -f /etc/csf/cseui.pl
-fi
-if [ -e "/etc/csf/csfui.pl" ]; then
-	rm -f /etc/csf/csfui.pl
-fi
-if [ -e "/etc/csf/csfuir.pl" ]; then
-	rm -f /etc/csf/csfuir.pl
-fi
-if [ -e "/usr/local/csf/bin/cseui.pl" ]; then
-	rm -f /usr/local/csf/bin/cseui.pl
-fi
-if [ -e "/usr/local/csf/bin/csfui.pl" ]; then
-	rm -f /usr/local/csf/bin/csfui.pl
-fi
-if [ -e "/usr/local/csf/bin/csfuir.pl" ]; then
-	rm -f /usr/local/csf/bin/csfuir.pl
-fi
-if [ -e "/usr/local/csf/bin/regex.pm" ]; then
-	rm -f /usr/local/csf/bin/regex.pm
-fi
-
-OLDVERSION=0
-if [ -e "/etc/csf/version.txt" ]; then
-    OLDVERSION=`head -n 1 /etc/csf/version.txt`
-fi
-
-rm -f /etc/csf/csf.pl /usr/sbin/csf /etc/csf/lfd.pl /usr/sbin/lfd
-chmod 700 csf.pl lfd.pl
-cp -avf csf.pl /usr/sbin/csf
-cp -avf lfd.pl /usr/sbin/lfd
-chmod 700 /usr/sbin/csf /usr/sbin/lfd
-ln -svf /usr/sbin/csf /etc/csf/csf.pl
-ln -svf /usr/sbin/lfd /etc/csf/lfd.pl
-ln -svf /usr/local/csf/bin/csftest.pl /etc/csf/
-ln -svf /usr/local/csf/bin/pt_deleted_action.pl /etc/csf/
-ln -svf /usr/local/csf/bin/remove_apf_bfd.sh /etc/csf/
-ln -svf /usr/local/csf/bin/uninstall.sh /etc/csf/
-ln -svf /usr/local/csf/bin/regex.custom.pm /etc/csf/
-ln -svf /usr/local/csf/lib/webmin /etc/csf/
-if [ ! -e "/etc/csf/alerts" ]; then
-    ln -svf /usr/local/csf/tpl /etc/csf/alerts
-fi
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/lfd
-chcon -h system_u:object_r:bin_t:s0 /usr/sbin/csf
-
-mkdir webmin/csf/images
-mkdir ui/images
-mkdir da/images
-mkdir interworx/images
-
-cp -avf csf/* webmin/csf/images/
-cp -avf csf/* ui/images/
-cp -avf csf/* da/images/
-cp -avf csf/* interworx/images/
-
-cp -avf messenger/*.php /etc/csf/messenger/
-cp -avf uninstall.cyberpanel.sh /usr/local/csf/bin/uninstall.sh
-cp -avf csftest.pl /usr/local/csf/bin/
-cp -avf remove_apf_bfd.sh /usr/local/csf/bin/
-cp -avf readme.txt /etc/csf/
-#
-# --- [Revolutionary Tech] Fix sanity.txt path ---
-# Was: cp -avf sanity.txt /usr/local/csf/lib/
-# Now copies to /etc/csf/ so the auto-tuner in install.sh can find it
-cp -avf sanity.txt /etc/csf/sanity.txt
-#
-cp -avf csf.rbls /usr/local/csf/lib/
-cp -avf restricted.txt /usr/local/csf/lib/
-cp -avf changelog.txt /etc/csf/
-cp -avf downloadservers /etc/csf/
-cp -avf install.txt /etc/csf/
-cp -avf version.txt /etc/csf/
-cp -avf license.txt /etc/csf/
-cp -avf webmin /usr/local/csf/lib/
-cp -avf ConfigServer /usr/local/csf/lib/
-cp -avf Net /usr/local/csf/lib/
-cp -avf Geo /usr/local/csf/lib/
-cp -avf Crypt /usr/local/csf/lib/
-cp -avf HTTP /usr/local/csf/lib/
-cp -avf JSON /usr/local/csf/lib/
-cp -avf version/* /usr/local/csf/lib/
-cp -avf csf.div /usr/local/csf/lib/
-cp -avf csfajaxtail.js /usr/local/csf/lib/
-cp -avf ui/images /etc/csf/ui/.
-cp -avf profiles /usr/local/csf/
-cp -avf csf.conf /usr/local/csf/profiles/reset_to_defaults.conf
-cp -avf lfd.logrotate /etc/logrotate.d/lfd
-chcon --reference /etc/logrotate.d /etc/logrotate.d/lfd
-cp -avf apf_stub.pl /etc/csf/
-
-rm -fv /etc/csf/csf.spamhaus /etc/csf/csf.dshield /etc/csf/csf.tor /etc/csf/csf.bogon
-
-mkdir -p /usr/local/man/man1/
-cp -avf csf.1.txt /usr/local/man/man1/csf.1
-cp -avf csf.help /usr/local/csf/lib/
-chmod 755 /usr/local/man/
-chmod 755 /usr/local/man/man1/
-chmod 644 /usr/local/man/man1/csf.1
-
-chmod -R 600 /etc/csf
-chmod -R 600 /var/lib/csf
-chmod -R 600 /usr/local/csf/bin
-chmod -R 600 /usr/local/csf/lib
-chmod -R 600 /usr/local/csf/tpl
-chmod -R 600 /usr/local/csf/profiles
-chmod 600 /var/log/lfd.log*
-
-chmod -v 700 /usr/local/csf/bin/*.pl /usr/local/csf/bin/*.sh /usr/local/csf/bin/*.pm
-chmod -v 700 /etc/csf/*.pl /etc/csf/*.cgi /etc/csf/*.sh /etc/csf/*.php /etc/csf/*.py
-chmod -v 700 /etc/csf/webmin/csf/index.cgi
-chmod -v 644 /etc/cron.d/lfd-cron
-chmod -v 644 /etc/cron.d/csf-cron
-
-cp -avf csget.pl /etc/cron.daily/csget
-chmod 700 /etc/cron.daily/csget
-/etc/cron.daily/csget --nosleep
-
-chmod -v 700 auto.cyberpanel.pl
-./auto.cyberpanel.pl $OLDVERSION
-
-if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
-    if [ -e /etc/init.d/lfd ]; then
-        if [ -f /etc/redhat-release ]; then
-            /sbin/chkconfig csf off
-            /sbin/chkconfig lfd off
-            /sbin/chkconfig csf --del
-            /sbin/chkconfig lfd --del
-        elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-            update-rc.d -f lfd remove
-            update-rc.d -f csf remove
-        elif [ -f /etc/gentoo-release ]; then
-            rc-update del lfd default
-            rc-update del csf default
-        elif [ -f /etc/slackware-version ]; then
-            rm -vf /etc/rc.d/rc3.d/S80csf
-            rm -vf /etc/rc.d/rc4.d/S80csf
-            rm -vf /etc/rc.d/rc5.d/S80csf
-            rm -vf /etc/rc.d/rc3.d/S85lfd
-            rm -vf /etc/rc.d/rc4.d/S85lfd
-            rm -vf /etc/rc.d/rc5.d/S85lfd
-        else
-            /sbin/chkconfig csf off
-            /sbin/chkconfig lfd off
-            /sbin/chkconfig csf --del
-            /sbin/chkconfig lfd --del
-        fi
-        rm -fv /etc/init.d/csf
-        rm -fv /etc/init.d/lfd
-    fi
-
-    mkdir -p /etc/systemd/system/
-    mkdir -p /usr/lib/systemd/system/
-    cp -avf lfd.service /usr/lib/systemd/system/
-    cp -avf csf.service /usr/lib/systemd/system/
-
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/lfd.service
-    chcon -h system_u:object_r:systemd_unit_file_t:s0 /usr/lib/systemd/system/csf.service
-
+if [ -d "/etc/systemd/system" ]; then
+    echo -n "Registering systemd services..."
+    cp -af lfd.service /etc/systemd/system/
+    cp -af csf.service /etc/systemd/system/ 2>/dev/null
     systemctl daemon-reload
-
-    systemctl enable csf.service
-    systemctl enable lfd.service
-
-    systemctl disable firewalld
-    systemctl stop firewalld
-    systemctl mask firewalld
+    systemctl enable csf.service >/dev/null 2>&1
+    systemctl enable lfd.service >/dev/null 2>&1
+    echo " done"
 else
-    cp -avf lfd.sh /etc/init.d/lfd
-    cp -avf csf.sh /etc/init.d/csf
-    chmod -v 755 /etc/init.d/lfd
-    chmod -v 755 /etc/init.d/csf
-
-    if [ -f /etc/redhat-release ]; then
-        /sbin/chkconfig lfd on
-        /sbin/chkconfig csf on
-    elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-        update-rc.d -f lfd remove
-        update-rc.d -f csf remove
-        update-rc.d lfd defaults 80 20
-        update-rc.d csf defaults 20 80
-    elif [ -f /etc/gentoo-release ]; then
-        rc-update add lfd default
-        rc-update add csf default
-    elif [ -f /etc/slackware-version ]; then
-        ln -svf /etc/init.d/csf /etc/rc.d/rc3.d/S80csf
-        ln -svf /etc/init.d/csf /etc/rc.d/rc4.d/S80csf
-        ln -svf /etc/init.d/csf /etc/rc.d/rc5.d/S80csf
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc3.d/S85lfd
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc4.d/S85lfd
-        ln -svf /etc/init.d/lfd /etc/rc.d/rc5.d/S85lfd
-    else
-        /sbin/chkconfig lfd on
-        /sbin/chkconfig csf on
+    # Fallback for init.d
+    echo -n "Registering init.d services..."
+    cp -af lfd.sh /etc/init.d/lfd
+    cp -af csf.sh /etc/init.d/csf
+    chmod 755 /etc/init.d/csf
+    chmod 755 /etc/init.d/lfd
+    if [ -x "/sbin/chkconfig" ]; then
+        /sbin/chkconfig --add csf
+        /sbin/chkconfig --add lfd
+    elif [ -x "/usr/sbin/update-rc.d" ]; then
+        update-rc.d csf defaults
+        update-rc.d lfd defaults
     fi
+    echo " done"
 fi
 
-# #
-#	Step > Permissions
-# #
+# Permissions
+chmod 600 /etc/csf/csf.conf
+chmod 700 /etc/csf/*.sh /etc/csf/*.pl
 
-prinp "${APP_NAME_SHORT:-CSF} > File Permissions" \
-       "This step ensures that your ${APP_NAME_SHORT:-CSF} files contain the correct folder and file permissions."
-
-# #
-#   List of directories to set ownership
-# #
-
-dirs="/etc/csf /var/lib/csf /usr/local/csf"
-
-# #
-#   List of individual files to set ownership
-# #
-
-files="/usr/sbin/csf /usr/sbin/lfd /etc/logrotate.d/lfd /etc/cron.d/csf-cron /etc/cron.d/lfd-cron /usr/local/man/man1/csf.1 /usr/lib/systemd/system/lfd.service /usr/lib/systemd/system/csf.service /etc/init.d/lfd /etc/init.d/csf"
-
-# #
-#   Set ownership for directories
-# #
-
-CSF_CHOWN_GENERAL="root:root"
-
-for dir in $dirs; do
-    if [ -d "$dir" ]; then
-        chown -Rf "${CSF_CHOWN_GENERAL}" "$dir"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for folder ${bluel}${dir}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; folder does not exist: ${yellowl}${dir}${greym}"
-    fi
-done
-
-# #
-#   Set ownership for individual files
-# #
-
-for file in $files; do
-    if [ -e "$file" ]; then
-        chown -f "${CSF_CHOWN_GENERAL}" "$file"
-		ok "    Set ownership ${greenl}${CSF_CHOWN_GENERAL}${greym} for file ${bluel}${file}${greym}"
-    else
-		warn "    Could not set ownership ${yellowl}${CSF_CHOWN_GENERAL}${greym}; file does not exist: ${yellowl}${file}${greym}"
-    fi
-done
-
-mkdir -vp /usr/local/CyberCP/public/static/configservercsf/
-cp -avf csf/* /usr/local/CyberCP/public/static/configservercsf/
-cp -avf csf/* cyberpanel/configservercsf/static/configservercsf/
-chmod 755 /usr/local/CyberCP/public/static/configservercsf/
-
-cp cyberpanel/cyberpanel.pl /usr/local/csf/bin/
-chmod 700 /usr/local/csf/bin/cyberpanel.pl
-cp -avf cyberpanel/configservercsf /usr/local/CyberCP/
-
-mkdir /home/cyberpanel/plugins
-touch /home/cyberpanel/plugins/configservercsf
-
-# #
-#	Cyberpanel Structure Reference
-#		
-#	stat -c "%n %U:%G %a" /usr/local/CyberCP/CyberCP/*
-#		/usr/local/CyberCP/CyberCP/__init__.py 			root:root 		644
-#		/usr/local/CyberCP/CyberCP/__pycache__ 			root:root 		755
-#		/usr/local/CyberCP/CyberCP/secMiddleware.py 	root:root 		644
-#		/usr/local/CyberCP/CyberCP/SecurityLevel.py 	root:root 		644
-#		/usr/local/CyberCP/CyberCP/settings.py 			root:cyberpanel 640
-#		/usr/local/CyberCP/CyberCP/urls.py 				root:root 		644
-#		/usr/local/CyberCP/CyberCP/wsgi.py 				root:root 		644
-# #
-
-# #
-#	Open
-#		/usr/local/CyberCP/CyberCP/settings.py
-#	
-#	Find
-#		'pluginHolder',
-#	
-#	Add Above
-#		'configservercsf',
-#	
-#	
-#	@target			/usr/local/CyberCP/CyberCP/settings.py
-#	@perms			root:cyberpanel 640
-# #
-
-SETTINGSPY_FILE="/usr/local/CyberCP/CyberCP/settings.py"
-if [ -f "$SETTINGSPY_FILE" ]; then
-    if ! grep "configservercsf" "$SETTINGSPY_FILE" >/dev/null 2>&1; then
-        SETTINGSPY_TEMP="/tmp/settings.py.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$SETTINGSPY_TEMP" ]; do
-            SETTINGSPY_TEMP="/tmp/settings.py.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission + owner:group to restore after patched
-		#		settings.py requires root:cyberpanel 0640
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            # GNU stat (Linux)
-            FILE_MODE=$(stat -c %a "$SETTINGSPY_FILE")
-            FILE_OWNER=$(stat -c %u "$SETTINGSPY_FILE")
-            FILE_GROUP=$(stat -c %g "$SETTINGSPY_FILE")
-        else
-            # BSD/macOS stat
-            FILE_MODE=$(stat -f %Lp "$SETTINGSPY_FILE")
-            FILE_OWNER=$(stat -f %u "$SETTINGSPY_FILE")
-            FILE_GROUP=$(stat -f %g "$SETTINGSPY_FILE")
-        fi
-
-        trap 'rm -f "$SETTINGSPY_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert 'configservercsf' above pluginHolder
-		# #
-
-        sed "/pluginHolder/ i \
-    \ \ \ \ 'configservercsf'," "$SETTINGSPY_FILE" > "$SETTINGSPY_TEMP" \
-            && mv "$SETTINGSPY_TEMP" "$SETTINGSPY_FILE" \
-            && chown "$FILE_OWNER:$FILE_GROUP" "$SETTINGSPY_FILE" \
-            && chmod "$FILE_MODE" "$SETTINGSPY_FILE"
-
-        echo "  CSF [CyberPanel]: Add configservercsf above pluginHolder in $SETTINGSPY_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip configservercsf above pluginHolder in $SETTINGSPY_FILE"
-    fi
+# Hardware Auto-Tune
+if [ -x "/usr/sbin/csf-autotune" ]; then
+    echo ""
+    echo "Running Hardware Auto-Tuner..."
+    /usr/sbin/csf-autotune
 fi
 
-# #
-#	Open
-#		/usr/local/CyberCP/CyberCP/urls.py
-#	
-#	Find
-#		path('plugins/', include('pluginHolder.urls')),
-#	
-#	Add Above
-#		path('configservercsf/',include('configservercsf.urls')),
-#	
-#	@target			/usr/local/CyberCP/CyberCP/urls.py
-#	@perms			root:root 644
-# #
-
-URLSPY_FILE="/usr/local/CyberCP/CyberCP/urls.py"
-if [ -f "$URLSPY_FILE" ]; then
-    if ! grep "configservercsf" "$URLSPY_FILE" >/dev/null 2>&1; then
-        URLSPY_TEMP="/tmp/urls.py.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$URLSPY_TEMP" ]; do
-            URLSPY_TEMP="/tmp/urls.py.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$URLSPY_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$URLSPY_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$URLSPY_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert the CSF URL above pluginHolder
-		# #
-
-        sed "/pluginHolder/ i \
-    \ \ \ \ path('configservercsf/',include('configservercsf.urls'))," \
-            "$URLSPY_FILE" > "$URLSPY_TEMP" \
-            && mv "$URLSPY_TEMP" "$URLSPY_FILE" \
-            && chmod "$FILE_MODE" "$URLSPY_FILE"
-
-        echo "  CSF [CyberPanel]: Add configservercsf.urls above pluginHolder.urls in $URLSPY_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip configservercsf.urls above pluginHolder.urls in $URLSPY_FILE"
-    fi
-fi
-
-# #
-#	if ! cat /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html | grep -q configservercsf; then
-#   	sed -i "/url 'csf'/ i <li><a href='/configservercsf/' title='ConfigServer Security and Firewall'><span>ConfigServer Security \&amp; Firewall</span></a></li>" /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	fi
-# #
-
-# #
-#	This is for older versions of Cyberpanel, not needed in newer releases.
-#	
-#   Open:
-#       /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	
-#   Find:
-#       <a href="#" title="{% trans 'Plugins' %}">
-#	
-#   Insert New (above it):
-#       {% include "/usr/local/CyberCP/configservercsf/templates/configservercsf/menu.html" %}
-#	
-#	@target			/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	@perms			root:root 644
-# #
-
-BASEINDEX_FILE="/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html"
-if [ -f "$BASEINDEX_FILE" ]; then
-    if ! grep "configserver" "$BASEINDEX_FILE" >/dev/null 2>&1; then
-        BASEINDEX_TEMP="/tmp/index.html.$$"
-        i=1
-
-		# #
-        #	Ensure temp file does not collide
-		# #
-
-        while [ -e "$BASEINDEX_TEMP" ]; do
-            BASEINDEX_TEMP="/tmp/index.html.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$BASEINDEX_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$BASEINDEX_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$BASEINDEX_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert the CSF menu include above the Plugins line
-		# #
-
-        sed "/trans 'Plugins'/ i \
-\{\% include \"/usr/local/CyberCP/configservercsf/templates/configservercsf/menu.html\" \%\}" \
-            "$BASEINDEX_FILE" > "$BASEINDEX_TEMP" \
-            && mv "$BASEINDEX_TEMP" "$BASEINDEX_FILE" \
-            && chmod "$FILE_MODE" "$BASEINDEX_FILE"
-
-        echo "  CSF [CyberPanel]: Add legacy csf menu include in $BASEINDEX_FILE"
-        trap - EXIT INT TERM
-    else
-        echo "  CSF [CyberPanel]: Skip legacy csf menu include - already present in ($BASEINDEX_FILE)"
-    fi
-else
-    echo "  CSF [CyberPanel]: Skip legacy csf menu include - file not found ($BASEINDEX_FILE)"
-fi
-
-# #
-#	Open
-#		/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	
-#	Find
-#		<a href="{% url 'imunify' %}" class="menu-item">
-#			<span>Imunify 360</span>
-#		</a>
-#	
-#	Add Above
-#		<a href="{% url 'configservercsf' %}" class="menu-item">
-#			<span>CSF</span>
-#		</a>
-#	
-#	@target			/usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-#	@perms			root:root 644
-#	@todo			Make POSIX compliant
-# #
-
-if ! grep -q "configservercsf" /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html; then
-	sed -i '/url '\''imunify'\''/ i \
-				<a href="{% url '\''configservercsf'\'' %}" class="menu-item">\
-					<span>CSF</span>\
-				</a>' /usr/local/CyberCP/baseTemplate/templates/baseTemplate/index.html
-fi
-
-# #
-#	Cyberpanel > Backardards Compatibility > path to url
-#	
-#	In Django 2.x+, URL routing switched from the old url() function to the newer path().
-#	which means older versions of Cyberpabel require url().
-#	
-#	Check the target file to see if we need to convert back to the old url() method.
-#	
-#	Change
-#		from django.urls import path
-#	
-#	To
-#		from django.conf.urls import url
-#	
-#	@target			/usr/local/CyberCP/CyberCP/urls.py
-#	@perms			root:root 644
-#	@todo			Make POSIX compliant
-# #
-
-if grep -q "import url" /usr/local/CyberCP/CyberCP/urls.py; then
-    sed -i \
-        -e "s/from django\.urls import path/from django.conf.urls import url/g" \
-        -e "s|path('', views.configservercsf, name='configservercsf')|url(r'^$', views.configservercsf, name='configservercsf')|g" \
-        -e "s|path('iframe', views.configservercsfiframe, name='configservercsfiframe')|url(r'^iframe/$', views.configservercsfiframe, name='configservercsfiframe')|g" \
-        -e "s/path(/url(/g" \
-        /usr/local/CyberCP/CyberCP/urls.py
-
-    echo "  CSF [CyberPanel]: Add Backwards Compaibility - path() => url()"
-else
-    echo "  CSF [CyberPanel]: Skip Backwards Compaibility - using path()"
-fi
-
-# #
-#	Saving form on "Firewall Configuration" page will toss the following error:
-#		{"error_message": "Data supplied is not accepted, following characters are not allowed in the input ` $ & ( ) [ ] { } ; : 
-#			\u2018 < >.", "errorMessage": "Data supplied is not accepted, following characters are not allowed in the input ` $ & ( ) [ ] { } ; : \u2018 < >."}
-#	
-#	Around 07/25, Cyberpabel removed path "configservercsf" from whitelisted path.
-#	Manually re-add exception.
-#	
-#	Adds:
-#                   if not isAPIEndpoint and valueAlreadyChecked == 0:
-#	
-#                       if 'configservercsf' in pathActual:
-#                           continue
-#	
-#	@target			/usr/local/CyberCP/CyberCP/secMiddleware.py
-#	@perms			root:root 644
-# #
-
-SECMID_FILE="/usr/local/CyberCP/CyberCP/secMiddleware.py"
-SECMID_TARGET_IF="if not isAPIEndpoint and valueAlreadyChecked == 0:"
-BYPASS_LINE="                        if 'configservercsf' in pathActual:"
-BYPASS_CONT="                            continue"
-
-if [ -f "$SECMID_FILE" ]; then
-    printf '\n'
-    printf '  CSF [CyberPanel]: Start secMiddleware.py - security exception...\n'
-
-	# #
-    #	Skip if exception already present
-	# #
-
-    if grep "if 'configservercsf' in pathActual" "$SECMID_FILE" >/dev/null 2>&1; then
-        printf '  CSF [CyberPanel]: Skip secMiddleware.py - security exception already present\n'
-    else
-		# #
-		#	Backup
-		# #
-
-		SECMID_BACKUP="${SECMID_FILE}.bak.$$"
-		cp -p "$SECMID_FILE" "$SECMID_BACKUP" ||
-		{
-			printf '  CSF [CyberPanel]: Fail secMiddleware.py - cannot create backup %s\n' "$SECMID_BACKUP"
-			exit 1
-		}
-
-        SECMID_TEMP="${SECMID_FILE}.tmp.$$"
-        i=1
-
-        while [ -e "$SECMID_TEMP" ]; do
-            SECMID_TEMP="${SECMID_FILE}.tmp.$$.$i"
-            i=$((i + 1))
-        done
-
-		# #
-        #	Store original file permission to restore after patched
-		# #
-
-        if stat --version >/dev/null 2>&1; then
-            FILE_MODE=$(stat -c %a "$SECMID_FILE")		# GNU stat
-        else
-            FILE_MODE=$(stat -f %Lp "$SECMID_FILE")		# BSD/macOS stat
-        fi
-
-        trap 'rm -f "$SECMID_TEMP"' EXIT INT TERM
-
-		# #
-        #	Insert bypass after every target line
-		# #
-
-        while IFS= read -r line || [ -n "$line" ]; do
-            printf '%s\n' "$line" >>"$SECMID_TEMP"
-
-            case "$line" in
-                *"$SECMID_TARGET_IF"*)
-                    printf '%s\n' '' >>"$SECMID_TEMP"
-                    printf '%s\n' "$BYPASS_LINE" >>"$SECMID_TEMP"
-                    printf '%s\n' "$BYPASS_CONT" >>"$SECMID_TEMP"
-                    printf '%s\n' '' >>"$SECMID_TEMP"
-                    ;;
-            esac
-        done <"$SECMID_FILE"
-
-        if cp -p "$SECMID_TEMP" "$SECMID_FILE"; then
-
-			# #
-            #	Restore original permissions
-			# #
-
-            chmod "$FILE_MODE" "$SECMID_FILE"
-            printf '  CSF [CyberPanel]: Add secMiddleware.py - exception after every occurrence of %s.\n' "'$SECMID_TARGET_IF'"
-        else
-            printf '  CSF [CyberPanel]: Fail secMiddleware.py - cannot write patched file — restoring backup.\n'
-            cp -p "$SECMID_BACKUP" "$SECMID_FILE" >/dev/null 2>&1 || true
-            exit 1
-        fi
-
-        trap - EXIT INT TERM
-        rm -f "$SECMID_TEMP"
-    fi
-else
-    printf '  CSF [CyberPanel]: Skip secMiddleware.py  -- target file not found (%s)\n' "$SECMID_FILE"
-fi
-
-# #
-#	Step > csf.conf Modified Settings
-#   
-#   SYSLOG_LOG          By default, RHEL systems use /var/log/messages
-#                       Debian systems use /var/log/syslog
-#	
-#	IPTABLES_LOG		The same as SYSLOG_LOG
-# #
-
-prinp "${APP_NAME_SHORT:-CSF} > Customize csf.config" \
-       "This step will check which Linux distribution family you are running, RHEL (Red Hat) or a Debian-based system. This determines what your default " \
-	   "logging paths will be."
-
-# #
-#   Detect system log file path
-# #
-
-SYSLOG_PATH=""
-
-if [ -f /var/log/syslog ]; then
-    SYSLOG_PATH="/var/log/syslog"
-elif [ -f /var/log/messages ]; then
-    SYSLOG_PATH="/var/log/messages"
-else
-    SYSLOG_PATH="/dev/null"
-fi
-
-# #
-#   Update SYSLOG_LOG and IPTABLES_LOG defaults
-#   
-#   Only change these values during installation.
-#   Users can manually edit csf.conf later, and those
-#   settings will not be overridden by updates.
-# #
-
-for KEY in SYSLOG_LOG IPTABLES_LOG; do
-    if grep -qE "^${KEY}" "${CSF_CONF}"; then
-        # Update existing line
-        sed -i "s|^${KEY}.*|${KEY} = \"${SYSLOG_PATH}\"|" "${CSF_CONF}"
-		ok "    Updating ${greenl}${CSF_CONF}${greym} setting ${fuchsial}${KEY}=${white}\"${bluel}${SYSLOG_PATH}${white}\"${greym}"
-    else
-        # Append if missing
-        echo "${KEY} = \"${SYSLOG_PATH}\"" >> "${CSF_CONF}"
-		ok "    Appending ${greenl}${CSF_CONF}${greym} setting ${fuchsial}${KEY}=${white}\"${bluel}${SYSLOG_PATH}${white}\"${greym}"
-    fi
-done
-
-# --- [Revolutionary Tech] Install Google IP Updater ---
-if [ -f "rt-google-ip-updater.pl" ]; then
-    print "    Installing Google IP Updater..."
-    cp -avf rt-google-ip-updater.pl /usr/local/sbin/rt-google-ip-updater.pl
-    chmod 700 /usr/local/sbin/rt-google-ip-updater.pl
-    
-    # Run once immediately to populate list
-    print "    > Populating Google IPs..."
-    /usr/local/sbin/rt-google-ip-updater.pl >/dev/null 2>&1
-    
-    # Create Weekly Cron (Between 2am-6am on Sunday)
-    # Format: MIN HOUR * * DAY
-    CRON_FILE="/etc/cron.d/rt-google-ip-updater"
-    MINUTE=$(shuf -i 0-59 -n 1)
-    HOUR=$(shuf -i 2-5 -n 1)
-    
-    print "    > Creating weekly cron job (Sunday @ $HOUR:$MINUTE)..."
-    cat <<EOF > "$CRON_FILE"
-# Revolutionary Technology - Google IP Updater
-# Updates Googlebot/Crawler IPs weekly
-$MINUTE $HOUR * * 0 root /usr/local/sbin/rt-google-ip-updater.pl > /dev/null 2>&1
-EOF
-    chmod 644 "$CRON_FILE"
-fi
-
-# #
-#	Check current value of
-#		TESTING="0"
-# #
-
-TESTING_VALUE=$(grep '^[[:space:]]*TESTING[[:space:]]*=' "$CSF_CONF" | awk -F= '{gsub(/ /,"",$2); print $2}' | tr -d '"')
-
-prinp "${APP_NAME_SHORT:-CSF} > Installation Complete" \
-       "Your installation is complete. Read important notes below."
-
-print "    For more information on how to use ${APP_NAME_SHORT:-CSF}; visit"
-print "        ${yellowd}${APP_LINK_DOCS:-https://docs.configserver.shop}"
-if [ -f "$CSF_CONF" ]; then
-	print "    "
-	print "    The next step in the process should be to open the config file located at"
-	print "        ${yellowd}${CSF_CONF}"
-	if [ "$TESTING_VALUE" = "1" ]; then
-	print "    "
-	print "    The setting ${yellowd}TESTING${greym} is currently ${greenl}enabled${greym}; you should open your config and"
-	print "    disable this setting before to you begin using your new firewall."
-	print "    To disable this setting, open ${yellowd}${CSF_CONF}${greym} and set the following:"
-	print "        ${fuchsial}TESTING = ${white}\"${bluel}0${white}\"${greym}"
-	else
-	print "    "
-	print "    The setting ${yellowd}TESTING${greym} is currently ${redl}disabled${greym}; which is the"
-	print "    correct setting if you plan to start using your firewall."
-	fi
-else
-	print "    "
-	print "    An error has occured; we cannot locate your ${APP_NAME_SHORT:-CSF} config file:"
-	print "        ${yellowd}${CSF_CONF}"
-	print "    "
-	print "    You must have a valid config in the correct location before ${APP_NAME_SHORT:-CSF} will"
-	print "    function properly."
-fi
-print
-print "    After editing or adding a new ${yellowd}${CSF_CONF}${greym}, restart ${APP_NAME_SHORT:-CSF} with:"
-print "        ${yellowd}sudo csf -ra"
-print
-print
+echo ""
+echo "Installation Complete."
+echo "Revolutionary Technology - ConfigServer Security & Firewall"
+echo "---------------------------------------------------------------"
+echo "1. Review configuration: /etc/csf/csf.conf"
+echo "2. Restart firewall:     csf -r"
+echo "3. Disable Testing Mode when ready."
+echo ""

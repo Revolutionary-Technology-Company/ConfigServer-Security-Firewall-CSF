@@ -3,7 +3,8 @@ echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
 echo "Stopping dynamic services (LFD, NIC Accelerator, GSB, XDP Shield)..."
-if test `cat /proc/1/comm` = "systemd"; then
+# FIX: Added quotes to prevent 'too many arguments' error
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Stop all our services first to freeze the state
     systemctl stop lfd.service >/dev/null 2>&1
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
@@ -57,7 +58,7 @@ echo "Flushing main CSF firewall rules..."
 
 # --- Continue with standard file removal ---
 
-if test `cat /proc/1/comm` = "systemd"; then
+if [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; then
     # Services are already stopped, now disable and remove files
     echo "Disabling and removing systemd services..."
     systemctl disable csf.service >/dev/null 2>&1
@@ -125,7 +126,7 @@ rm -fv /usr/local/CyberCP/public/csf.py
 rm -fv /usr/local/CyberCP/public/csf_static/*
 rmdir /usr/local/CyberCP/public/csf_static 2>/dev/null
 
-# [UPDATED] Remove Auto-Tuner & Hardware Acceleration files
+# Remove Auto-Tuner & Hardware Acceleration files
 echo "Removing Auto-Tuner and Acceleration tools..."
 rm -fv /usr/local/sbin/csf-autotune.sh
 rm -fv /usr/local/sbin/csf-firmware-check.sh
@@ -139,12 +140,12 @@ rm -fv /usr/local/sbin/csf-xdp-loader.sh
 rm -fv /etc/cron.hourly/rt-block-reporter
 rm -fv /var/lib/csf/rt-reporter.state
 
-# [NEW] Remove ModSec3 Bridge files
+# Remove ModSec3 Bridge files
 echo "Removing ModSec3 Bridge files..."
 rm -fv /usr/local/sbin/modsec3_converter.pl
 rm -fv /var/log/modsec_compat.log
 
-# [NEW] Clean up Google IP entries from csf.allow
+# Clean up Google IP entries from csf.allow
 echo "Cleaning Google IP entries from csf.allow..."
 if [ -f /etc/csf/csf.allow ]; then
     # This sed command removes the entire block between the markers
@@ -159,11 +160,9 @@ rm -Rfv /etc/csf
 rm -Rfv /usr/local/csf
 rm -Rfv /var/lib/csf
 
-# [Revolutionary Tech Uninstall]
 # Remove custom pre-install script directory
 echo "Removing Revolutionary Technology pre-install scripts..."
 rm -Rfv /usr/local/include/csf
-# [End Revolutionary Tech Uninstall]
 
 echo
 echo "Revolutionary Technology Firewall Engine has been uninstalled."
