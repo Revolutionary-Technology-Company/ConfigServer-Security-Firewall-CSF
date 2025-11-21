@@ -1,11 +1,16 @@
 package Cpanel::Config::ConfigObj::Driver::ConfigServercsf;
 
 use strict;
+use warnings;
+
+# Import the META module so we can share the Version number
 use Cpanel::Config::ConfigObj::Driver::ConfigServercsf::META ();
+
+# Sync the version with META.pm so you only have to update it in one place
 *VERSION = \$Cpanel::Config::ConfigObj::Driver::ConfigServercsf::META::VERSION;
 
-#use parent qw(Cpanel::Config::ConfigObj::Interface::Config::v1);
-our @ISA = qw(Cpanel::Config::ConfigObj::Interface::Config::v1);    
+# RHEL 8+ Compliant Inheritance
+use parent qw(Cpanel::Config::ConfigObj::Interface::Config::v1);
 
 sub init {
     my ( $class, $software_obj ) = @_;
@@ -14,6 +19,8 @@ sub init {
         'thirdparty_ns' => "ConfigServercsf",
         'meta'          => {},
     };
+    
+    # Pass to parent class
     my $self = $class->SUPER::base( $ConfigServercsf_defaults, $software_obj );
 
     return $self;
@@ -32,16 +39,19 @@ sub disable {
 sub info {
     my ($self)   = @_;
     my $meta_obj = $self->meta();
-    my $abstract = $meta_obj->abstract();
+    
+    # Grab abstract from META, fallback if missing
+    my $abstract = $meta_obj->abstract() || 'ConfigServer Security & Firewall';
     return $abstract;
 }
 
 sub acl_desc {
     return [
         {
-            'acl'              => 'software-ConfigServer-csf',       #this should be "software-$key"
+            # This MUST match the 'acls=' line in csf.conf
+            'acl'              => 'software-ConfigServer-csf',       
             'default_value'    => 0,
-            'default_ui_value' => 0,                        # NOTE: this is for ui; first time setting reseller privs
+            'default_ui_value' => 0,
             'name'             => 'ConfigServer Security & Firewall (Reseller UI)',
             'acl_subcat'       => 'Third Party Services',
         },

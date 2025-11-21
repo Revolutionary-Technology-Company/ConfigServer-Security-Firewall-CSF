@@ -1,12 +1,16 @@
 package Cpanel::Config::ConfigObj::Driver::ConfigServercsf::META;
 
 use strict;
+use warnings;
 
-our $VERSION = 1.1;
+# Update version to match your main script
+our $VERSION = 1.2;
 
-#use parent qw(Cpanel::Config::ConfigObj::Interface::Config::Version::v1);
+# RHEL 8+ Compliant Inheritance
+use parent qw(Cpanel::Config::ConfigObj::Interface::Config::Version::v1);
+
 sub spec_version {
-	return 1;
+    return 1;
 }
 
 sub meta_version {
@@ -21,20 +25,20 @@ sub content {
     my ($locale_handle) = @_;
 
     my $content = {
-        'vendor' => 'Jonathan Michaelson',
-        'url'    => 'www.configserver.shop',
-        'name'   => {
-            'short'  => 'ConfigServercsf Driver',
-            'long'   => 'ConfigServercsf Driver',
+        'vendor'   => 'Revolutionary Technology',     # Updated from Jonathan Michaelson
+        'url'      => 'https://configserver.shop',    # Updated URL
+        'name'     => {
+            'short'  => 'ConfigServer Security & Firewall',
+            'long'   => 'ConfigServer Security & Firewall',
             'driver' => get_driver_name(),
         },
         'since'    => 'cPanel 11.38.1',
-        'abstract' => "A ConfigServercsf driver",
+        'abstract' => "ConfigServer Security & Firewall",
         'version'  => $VERSION,
     };
 
     if ($locale_handle) {
-        $content->{'abstract'} = $locale_handle->maketext("ConfigServer csf driver");
+        $content->{'abstract'} = $locale_handle->maketext("ConfigServer Security & Firewall");
     }
 
     return $content;
@@ -43,4 +47,5 @@ sub content {
 sub showcase {
     return;
 }
+
 1;
