@@ -840,7 +840,8 @@ if ($config{TESTING}) {
 		my $maj = $1;
 		my $mid = $2;
 		my $min = $3;
-		if ($maj == 3 and $mid > 6) {
+		# FIX: Now accepts Kernel 3.7+ AND any kernel v4, v5, v6, etc.
+		if ($maj > 3 or ($maj == 3 and $mid > 6)) {
 			open (IN, "<", "/etc/csf/csf.conf") or die $!;
 			flock (IN, LOCK_SH) or die $!;
 			my @config = <IN>;
@@ -851,7 +852,7 @@ if ($config{TESTING}) {
 			foreach my $line (@config) {
 				if ($line =~ /^USE_CONNTRACK =/) {
 					print OUT "USE_CONNTRACK = \"1\"\n";
-					print "\n*** USE_CONNTRACK Enabled\n\n";
+					print "\n*** USE_CONNTRACK Enabled (Kernel $maj.$mid detected)\n\n";
 				} else {
 					print OUT $line."\n";
 				}
