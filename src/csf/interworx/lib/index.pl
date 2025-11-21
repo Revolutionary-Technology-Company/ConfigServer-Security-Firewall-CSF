@@ -29,6 +29,7 @@
 # #
 # start main
 use strict;
+use warnings; # Added for RHEL 8+ compliance
 use File::Find;
 use Fcntl qw(:DEFAULT :flock);
 use Sys::Hostname qw(hostname);
@@ -73,16 +74,6 @@ sub getCodename
 		$cname = "webmin";
 	}
 
-	# #
-    #	Optional debug output
-	# #
-
-	#	print "$cname\n";
-
-	# #
-    #	Return the value so it can be used in conditionals
-	# #
-
 	return $cname;
 }
 
@@ -100,8 +91,10 @@ chomp $myv;
 $script = "/nodeworx/configservercsf";
 $images = "/configserver/csf";
 
-my $buffer = $ENV{'QUERY_STRING'};
-if ($buffer eq "") {$buffer = $ENV{POST}}
+# RHEL 8 Fix: Initialize buffer safely
+my $buffer = $ENV{'QUERY_STRING'} || "";
+if ($buffer eq "") { $buffer = $ENV{POST} || "" }
+
 my @pairs = split(/&/, $buffer);
 foreach my $pair (@pairs)
 {
@@ -116,10 +109,6 @@ delete $FORM{iworxme};
 
 print "content-type: text/html\n\n";
 
-#foreach my $key (keys %ENV) {
-#	print "$key = [$ENV{$key}]<br>\n";
-#}
-
 my $csfjs = qq{
     <script>
         var csfCodename = "$codename";
@@ -130,6 +119,9 @@ my $bootstrapcss = "<link rel='stylesheet' href='$images/bootstrap/css/bootstrap
 my $csfnt = "<script src='$images/csfont.min.js'></script>";
 my $jqueryjs = "<script src='$images/jquery.min.js'></script>";
 my $bootstrapjs = "<script src='$images/bootstrap/js/bootstrap.min.js'></script>";
+
+# Sanitize action to avoid Perl warnings if undefined
+$FORM{action} ||= "";
 
 unless ($FORM{action} eq "tailcmd" or $FORM{action} =~ /^cf/ or $FORM{action} eq "logtailcmd" or $FORM{action} eq "loggrepcmd")
 {
