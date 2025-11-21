@@ -1,119 +1,105 @@
 #!/usr/bin/perl
-
-# 
-# Revolutionary Technology - Google IP Updater
-# Copyright (C) 2025 Revolutionary Technology
-#
-# This script fetches Google Bot & Service IPs from their official
-# JSON endpoints and adds them to /etc/csf/csf.allow.
-# It uses markers to replace the old block, preventing file bloat.
-#
+# #
+#   @script             Revolutionary Technology Google IP Updater
+#   @description        Fetches official Google Crawler/Bot IPs (IPv4/IPv6)
+#                       and updates csf.allow while preserving custom rules.
+#   @frequency          Weekly (via cron)
+# #
 
 use strict;
 use warnings;
-use LWP::Simple;
-use JSON::MaybeXS;
-use Fcntl qw(:flock);
 
-my $csf_allow    = "/etc/csf/csf.allow";
-my $temp_allow   = "/etc/csf/csf.allow.tmp.$$"; # Use process ID for temp file
-my $csf_bin      = "/usr/sbin/csf";
-
-my @google_urls = (
-    "https://developers.google.com/search/apis/ipranges/googlebot.json",
-    "https://www.gstatic.com/ipranges/goog.json"
+my $allow_file = "/etc/csf/csf.allow";
+my $csf_cmd    = "/usr/sbin/csf";
+my @urls       = (
+    "https://developers.google.com/static/search/apis/ipranges/googlebot.json",
+    "https://developers.google.com/static/search/apis/ipranges/special-crawlers.json",
+    "https://developers.google.com/static/search/apis/ipranges/user-triggered-fetchers.json",
+    "https://developers.google.com/static/search/apis/ipranges/user-triggered-fetchers-google.json"
 );
 
-my $marker_begin = "# BEGIN Revolutionary Technology Google IPs";
-my $marker_end   = "# END Revolutionary Technology Google IPs";
+# The ASNs you requested to allow explicitly
+my @asns = (
+    "AS15169", "AS40873", "AS395973", "AS36492", "AS36040",
+    "AS43515", "AS36561", "AS19527",  "AS139070", "AS396982"
+);
 
-my %ip_prefixes;
-my $json = JSON::MaybeXS->new(utf8 => 1);
+# --- 1. Fetch IPs from Google ---
+print "Fetching Google IP ranges...\n";
+my %ips;
+foreach my $url (@urls) {
+    # Try wget first, fall back to curl
+    my $cmd = "wget -qO- \"$url\" --timeout=10 --tries=2";
+    my $json = `$cmd`;
+    
+    if ($? != 0 || !$json) {
+        $cmd = "curl -s \"$url\" --connect-timeout 10 --retry 2";
+        $json = `$cmd`;
+    }
 
-# --- 1. Fetch and Parse IPs ---
-foreach my $url (@google_urls) {
-    my $content = get($url);
-    unless ($content) {
-        print "Warning: Could not fetch $url. Skipping.\n";
+    if ($json) {
+        # Simple regex extraction to avoid dependency hell with JSON modules
+        while ($json =~ /"ipv4Prefix":\s*"([^"]+)"/g) { $ips{$1} = 1; }
+        while ($json =~ /"ipv6Prefix":\s*"([^"]+)"/g) { $ips{$1} = 1; }
+    } else {
+        warn "Warning: Failed to fetch $url\n";
+    }
+}
+
+if (scalar keys %ips < 5) {
+    die "Error: Too few IPs fetched. Aborting update to prevent lockout.\n";
+}
+
+# --- 2. Read existing csf.allow ---
+open(my $fh, "<", $allow_file) or die "Cannot read $allow_file: $!";
+my @lines = <$fh>;
+close($fh);
+
+# --- 3. Rebuild file content ---
+my @new_lines;
+my $in_block = 0;
+
+foreach my $line (@lines) {
+    if ($line =~ /^# BEGIN Revolutionary Technology Google IPs/) {
+        $in_block = 1;
         next;
     }
-    
-    my $data;
-    eval { $data = $json->decode($content); };
-    if ($@) {
-        print "Warning: Could not parse JSON from $url. Skipping.\n";
+    if ($line =~ /^# END Revolutionary Technology Google IPs/) {
+        $in_block = 0;
         next;
     }
-
-    if (exists $data->{'prefixes'} && ref $data->{'prefixes'} eq 'ARRAY') {
-        foreach my $prefix (@{ $data->{'prefixes'} }) {
-            my $comment = ($url =~ /googlebot/) ? "Google Bot" : "Google Service";
-            
-            if (exists $prefix->{'ipv4Prefix'}) {
-                $ip_prefixes{ $prefix->{'ipv4Prefix'} } = $comment;
-            }
-            if (exists $prefix->{'ipv6Prefix'}) {
-                $ip_prefixes{ $prefix->{'ipv6Prefix'} } = $comment;
-            }
-        }
-    }
+    push @new_lines, $line unless $in_block;
 }
 
-unless (keys %ip_prefixes) {
-    die "Error: No IP prefixes were successfully fetched from any source. Aborting update to $csf_allow.";
+# Remove trailing newlines to make clean append
+while (@new_lines && $new_lines[-1] =~ /^\s*$/) { pop @new_lines; }
+push @new_lines, "\n";
+
+# --- 4. Append new Google Block ---
+push @new_lines, "# BEGIN Revolutionary Technology Google IPs\n";
+push @new_lines, "# Updated: " . scalar(localtime) . "\n";
+
+# Add ASNs
+foreach my $asn (@asns) {
+    # Format for CSF: do:ASN:NUMBER
+    my $clean_asn = $asn;
+    $clean_asn =~ s/^AS//i; 
+    push @new_lines, "do:ASN:$clean_asn # Google ASN $asn\n";
 }
 
-# --- 2. Safely Update csf.allow ---
-unless (open(my $read_fh, "<", $csf_allow)) {
-    die "Error: Cannot open $csf_allow for reading: $!";
+# Add IPs
+foreach my $ip (sort keys %ips) {
+    push @new_lines, "$ip # Google Bot/Crawler\n";
 }
 
-unless (open(my $write_fh, ">", $temp_allow)) {
-    close $read_fh;
-    die "Error: Cannot open $temp_allow for writing: $!";
-}
+push @new_lines, "# END Revolutionary Technology Google IPs\n";
 
-# Lock the temp file
-flock($write_fh, LOCK_EX) or die "Error: Cannot lock $temp_allow: $!";
+# --- 5. Write and Restart ---
+open($fh, ">", $allow_file) or die "Cannot write $allow_file: $!";
+print $fh @new_lines;
+close($fh);
 
-my $in_google_block = 0;
+print "Updated csf.allow with " . scalar(keys %ips) . " Google IPs and " . scalar(@asns) . " ASNs.\n";
 
-while (my $line = <$read_fh>) {
-    if ($line =~ /^\Q$marker_begin\E/) {
-        $in_google_block = 1;
-        next; # Skip this line, we'll write a new one
-    }
-    if ($line =~ /^\Q$marker_end\E/) {
-        $in_google_block = 0;
-        next; # Skip this line, we'll write a new one
-    }
-    
-    print $write_fh $line unless $in_google_block;
-}
-
-close $read_fh;
-
-# --- 3. Write New Block ---
-# (This will append to the file if the markers weren't found, which is fine)
-print $write_fh "\n$marker_begin\n";
-foreach my $ip (sort keys %ip_prefixes) {
-    print $write_fh "$ip # $ip_prefixes{$ip}\n";
-}
-print $write_fh "$marker_end\n";
-
-close $write_fh; # This releases the lock
-
-# --- 4. Atomic Replace and Reload ---
-if (rename($temp_allow, $csf_allow)) {
-    print "Successfully updated Google IPs in $csf_allow.\n";
-    
-    if (-x $csf_bin) {
-        system("$csf_bin -r > /dev/null 2>&1");
-        print "CSF firewall reloaded.\n";
-    }
-} else {
-    print "Error: Failed to move $temp_allow to $csf_allow: $!\n";
-    unlink $temp_allow; # Clean up temp file
-}
-
-exit 0;
+# Reload CSF/LFD without full restart (fast reload)
+system("$csf_cmd -ra >/dev/null 2>&1");

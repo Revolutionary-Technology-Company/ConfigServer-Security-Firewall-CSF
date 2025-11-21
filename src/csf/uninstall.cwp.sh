@@ -2,13 +2,14 @@
 echo "Uninstalling Revolutionary Technology Firewall Engine..."
 echo
 
-echo "Stopping dynamic services (LFD, NIC Accelerator, GSB Poller)..."
-if test \`cat /proc/1/comm\` = "systemd"; then
+echo "Stopping dynamic services (LFD, NIC Accelerator, GSB, XDP Shield)..."
+if test `cat /proc/1/comm` = "systemd"; then
     # Stop all our services first to freeze the state
     systemctl stop lfd.service >/dev/null 2>&1
     systemctl stop csf-nic-accelerator.service >/dev/null 2>&1
     systemctl stop modsec3-converter.service >/dev/null 2>&1
     systemctl stop rt-gsb-poller.service >/dev/null 2>&1
+    systemctl stop csf-xdp-loader.service >/dev/null 2>&1
 else
     # Fallback for non-systemd
     /etc/init.d/lfd stop >/dev/null 2>&1
@@ -56,7 +57,7 @@ echo "Flushing main CSF firewall rules..."
 
 # --- Continue with standard file removal ---
 
-if test \`cat /proc/1/comm\` = "systemd"; then
+if test `cat /proc/1/comm` = "systemd"; then
     # Services are already stopped, now disable and remove files
     echo "Disabling and removing systemd services..."
     systemctl disable csf.service >/dev/null 2>&1
@@ -64,12 +65,14 @@ if test \`cat /proc/1/comm\` = "systemd"; then
     systemctl disable modsec3-converter.service >/dev/null 2>&1
     systemctl disable csf-nic-accelerator.service >/dev/null 2>&1
     systemctl disable rt-gsb-poller.service >/dev/null 2>&1
+    systemctl disable csf-xdp-loader.service >/dev/null 2>&1
 
     rm -fv /usr/lib/systemd/system/csf.service
     rm -fv /usr/lib/systemd/system/lfd.service
     rm -fv /etc/systemd/system/modsec3-converter.service
     rm -fv /etc/systemd/system/csf-nic-accelerator.service
     rm -fv /etc/systemd/system/rt-gsb-poller.service
+    rm -fv /etc/systemd/system/csf-xdp-loader.service
     
     systemctl daemon-reload
 else
@@ -130,6 +133,7 @@ rm -fv /usr/local/sbin/rt-csf-update.sh
 rm -fv /usr/local/sbin/rt-gsb-poller.sh
 rm -fv /usr/local/sbin/rt-block-reporter.sh
 rm -fv /usr/local/sbin/rt-google-ip-updater.pl
+rm -fv /usr/local/sbin/csf-xdp-loader.sh
 rm -fv /etc/cron.hourly/rt-block-reporter
 rm -fv /var/lib/csf/rt-reporter.state
 

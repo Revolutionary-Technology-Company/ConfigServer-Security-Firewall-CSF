@@ -1041,6 +1041,31 @@ for KEY in SYSLOG_LOG IPTABLES_LOG; do
     fi
 done
 
+# --- [Revolutionary Tech] Install Google IP Updater ---
+if [ -f "rt-google-ip-updater.pl" ]; then
+    print "    Installing Google IP Updater..."
+    cp -avf rt-google-ip-updater.pl /usr/local/sbin/rt-google-ip-updater.pl
+    chmod 700 /usr/local/sbin/rt-google-ip-updater.pl
+    
+    # Run once immediately to populate list
+    print "    > Populating Google IPs..."
+    /usr/local/sbin/rt-google-ip-updater.pl >/dev/null 2>&1
+    
+    # Create Weekly Cron (Between 2am-6am on Sunday)
+    # Format: MIN HOUR * * DAY
+    CRON_FILE="/etc/cron.d/rt-google-ip-updater"
+    MINUTE=$(shuf -i 0-59 -n 1)
+    HOUR=$(shuf -i 2-5 -n 1)
+    
+    print "    > Creating weekly cron job (Sunday @ $HOUR:$MINUTE)..."
+    cat <<EOF > "$CRON_FILE"
+# Revolutionary Technology - Google IP Updater
+# Updates Googlebot/Crawler IPs weekly
+$MINUTE $HOUR * * 0 root /usr/local/sbin/rt-google-ip-updater.pl > /dev/null 2>&1
+EOF
+    chmod 644 "$CRON_FILE"
+fi
+
 # #
 #	Check current value of
 #		TESTING="0"
