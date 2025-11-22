@@ -163,6 +163,43 @@ fi
 cp -af messenger/* /usr/local/csf/tpl/
 echo " done"
 
+BLOCK_REPORTER_SCRIPT="rt-block-reporter.sh"
+BLOCK_REPORTER_DEST="/usr/local/sbin/rt-block-reporter.sh"
+BLOCK_REPORTER_CRON="/etc/cron.hourly/rt-block-reporter" 
+
+# --- Install Google Block Reporter ---
+    if [ ! -f "$BLOCK_REPORTER_SCRIPT" ]; then
+        print "    ${redl}[ERROR]${greym} $BLOCK_REPORTER_SCRIPT not found. Skipping Block Reporter."
+    else
+        cp "$BLOCK_REPORTER_SCRIPT" "$BLOCK_REPORTER_DEST"
+         if [ $? -eq 0 ]; then
+            chmod +x "$BLOCK_REPORTER_DEST"
+            print "    [OK] Block Reporter installed to $BLOCK_REPORTER_DEST"
+            
+            echo "    > Creating hourly cron job for Block Reporter..."
+            ln -sf "$BLOCK_REPORTER_DEST" "$BLOCK_REPORTER_CRON"
+            chmod +x "$BLOCK_REPORTER_CRON"
+            print "    [OK] Block Reporter cron job created."
+        else
+            print "    ${redl}[ERROR]${greym} Failed to copy $BLOCK_REPORTER_SCRIPT."
+        fi
+    fi
+
+# AppArmor (Application Awareness)
+if [ -f "install-apparmor.sh" ]; then
+    # Create profiles directory structure
+    mkdir -p profiles
+    
+    # Move ALL profile files (usr.sbin.*) into the folder
+    # This handles existing ones (sshd, httpd) AND new ones (named, php-fpm, etc.)
+    if ls usr.sbin.* >/dev/null 2>&1; then
+        mv usr.sbin.* profiles/
+    fi
+    
+    chmod 700 install-apparmor.sh
+    ./install-apparmor.sh
+fi
+
 # ==============================================================================
 # PHASE 5: REVOLUTIONARY TECHNOLOGY TOOLS (XDP, Google, ModSec)
 # ==============================================================================

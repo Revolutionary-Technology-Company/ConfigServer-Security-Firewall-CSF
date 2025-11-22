@@ -1,0 +1,73 @@
+# Revolutionary Technology - PowerDNS Authoritative Server Hardening Profile
+# Confines pdns_server to DNS serving, configuration, and data directories.
+
+#include <tunables/global>
+
+/usr/sbin/pdns_server {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/user-tmp>
+
+  # Capability requirements
+  capability net_bind_service,
+  capability setgid,
+  capability setuid,
+  capability sys_chroot,
+  capability sys_resource,
+  capability dac_override,
+  capability dac_read_search,
+  capability chown,
+  capability fowner,
+  capability kill,
+  capability sys_nice,
+
+  # Network access - DNS uses both UDP and TCP
+  network inet dgram,
+  network inet stream,
+  network inet6 dgram,
+  network inet6 stream,
+  network unix stream,
+
+  # Process management
+  /usr/sbin/pdns_server mr,
+
+  # Configuration files
+  /etc/powerdns/** r,
+  /etc/pdns/** r,
+  /etc/default/pdns r,
+
+  # Backend Configuration (e.g., for MySQL/PostgreSQL backends)
+  # Often in include directories
+  /etc/powerdns/pdns.d/** r,
+  /etc/pdns/pdns.d/** r,
+
+  # Zone Data directories (Common locations for Bind backend)
+  /var/lib/powerdns/** rw,
+  /var/lib/pdns/** rw,
+  
+  # Log files
+  /var/log/pdns.log rw,
+  /var/log/powerdns/** rw,
+
+  # PID and Socket files
+  /var/run/pdns.pid rw,
+  /run/pdns.pid rw,
+  /var/run/pdns/pdns.pid rw,
+  /run/pdns/pdns.pid rw,
+  /var/run/pdns/pdns.controlsocket rw,
+  /run/pdns/pdns.controlsocket rw,
+
+  # Allow execution of specific backend helpers if needed
+  # (Uncomment and adjust if using pipe backend scripts)
+  # /usr/local/bin/my-pipe-backend ix,
+
+  # Deny execution of shells or other binaries
+  deny /bin/sh x,
+  deny /bin/bash x,
+  deny /usr/bin/* x,
+  
+  # Prevent reading of sensitive system files
+  deny /etc/shadow r,
+  deny /etc/gshadow r,
+  deny /root/** rwx,
+}

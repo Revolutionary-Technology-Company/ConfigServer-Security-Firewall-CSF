@@ -1,0 +1,46 @@
+# Revolutionary Technology - Web Server Hardening
+# Prevents web shells from executing system binaries
+
+#include <tunables/global>
+
+/usr/sbin/httpd {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/apache2-common>
+
+  capability net_bind_service,
+  capability setgid,
+  capability setuid,
+  capability sys_tty_config,
+  capability dac_override,
+
+  # Network Access
+  network inet tcp,
+  network inet6 tcp,
+  network inet udp,
+
+  # Read Configuration
+  /etc/httpd/** r,
+  /usr/local/apache/conf/** r,
+
+  # Web Content - Read Only
+  /var/www/html/** r,
+  /home/*/public_html/** r,
+
+  # Logs - Write Only
+  /var/log/httpd/** w,
+  /usr/local/apache/logs/** w,
+
+  # Revolutionary Technology: KILL WEB SHELLS
+  # Prevent the web server from running these tools
+  deny /usr/bin/wget x,
+  deny /usr/bin/curl x,
+  deny /usr/bin/python* x,
+  deny /usr/bin/perl x,
+  deny /usr/bin/gcc x,
+  deny /usr/bin/nmap x,
+  
+  # Allow standardized CGI execution
+  /usr/bin/php-cgi ix,
+  /usr/sbin/suexec ix,
+}
