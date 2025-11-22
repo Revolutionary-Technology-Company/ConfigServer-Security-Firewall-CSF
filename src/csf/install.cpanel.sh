@@ -170,6 +170,7 @@ fi
 echo "Registering with cPanel/WHM..."
 cp -af csf.cgi /usr/local/cpanel/whostmgr/docroot/cgi/configserver/
 cp -af csf.conf /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/
+chmod 755 /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf.cgi
 if [ -d "/usr/local/cpanel/Cpanel/Config/ConfigObj/Driver" ]; then
     mkdir -p /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf
     cp -af ConfigServercsf.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/

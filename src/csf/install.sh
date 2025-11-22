@@ -5,334 +5,179 @@
 #                       Login Failure Daemon (LFD)
 #   @copyright          Copyright (C) 2025-2026 Revolutionary Technology
 #   @website            https://configserver.shop
-#   @description        Universal Installer for Revolutionary Technology CSF/LFD
-#                       Combines Environment Setup, Toolchain, and App Installation
+#   @description        Master Installer for Revolutionary Technology CSF/LFD
+#                       (Includes XDP, Suricata, AppArmor, and Google Tools)
 #
 ###############################################################################
 
 echo "---------------------------------------------------------------"
-echo "Revolutionary Technology - ConfigServer Security & Firewall Installer"
+echo "Revolutionary Technology - ConfigServer Security & Firewall"
 echo "Copyright (C) 2025-2026 Dr. Correo Hofstad"
+echo "Master Installer v2.15.09"
 echo "---------------------------------------------------------------"
 echo ""
 
-# --- 1. Root Check ---
-if [ ! `id -u` = 0 ]; then
-    echo "FAILED: You have to be logged in as root (UID:0) to install csf"
-    exit
+# --- 0. Sanitize Environment (The Windows Virus Fix) ---
+if [ -n "$(command -v sed)" ]; then
+    find . -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+    find . -type f -name "*.pl" -exec sed -i 's/\r$//' {} +
+    find . -type f -name "*.txt" -exec sed -i 's/\r$//' {} +
+    find . -type f -name "*.conf" -exec sed -i 's/\r$//' {} +
+    find . -type f -name "*.cgi" -exec sed -i 's/\r$//' {} +
+    find . -type f -name "*.pm" -exec sed -i 's/\r$//' {} +
 fi
 
-# --- 2. Directory Setup ---
+# --- 1. Directory Setup ---
 echo -n "Creating directory structure..."
-mkdir -p -m 0600 /etc/csf
-mkdir -p -m 0600 /var/lib/csf/backup
-mkdir -p -m 0600 /var/lib/csf/Geo
-mkdir -p -m 0600 /var/lib/csf/ui
-mkdir -p -m 0600 /var/lib/csf/stats
-mkdir -p -m 0600 /var/lib/csf/lock
-mkdir -p -m 0600 /var/lib/csf/webmin
-mkdir -p -m 0600 /var/lib/csf/zone
-mkdir -p -m 0600 /usr/local/csf/bin
-mkdir -p -m 0600 /usr/local/csf/lib
-mkdir -p -m 0600 /usr/local/csf/tpl
-mkdir -p -m 0600 /usr/local/csf/bpf
+mkdir -p /etc/csf/ui
+mkdir -p /var/lib/csf
+mkdir -p /usr/local/csf/bin
+mkdir -p /usr/local/csf/lib
+mkdir -p /usr/local/csf/tpl
+mkdir -p /usr/local/csf/profiles
+mkdir -p /usr/local/sbin
 echo " done"
 
-# ==============================================================================
-# PHASE 1: ENVIRONMENT SETUP & DEPENDENCIES (From Other Installer)
-# ==============================================================================
-echo "Checking and installing Dependencies..."
+# --- 2. Install Libraries (The "Scavenger" Fix) ---
+echo -n "Installing Perl libraries..."
+# 1. Try copying from root folders if they exist (fixes your specific issue)
+cp -afR ConfigServer /usr/local/csf/lib/ 2>/dev/null
+cp -afR Net /usr/local/csf/lib/ 2>/dev/null
+cp -afR Crypt /usr/local/csf/lib/ 2>/dev/null
+cp -afR Geo /usr/local/csf/lib/ 2>/dev/null
+cp -afR JSON /usr/local/csf/lib/ 2>/dev/null
+cp -afR version /usr/local/csf/lib/ 2>/dev/null
+cp -afR HTTP /usr/local/csf/lib/ 2>/dev/null
 
-# Detect Package Manager & Install Core Deps
-if [ -f /usr/bin/apt-get ]; then
-    # Debian/Ubuntu
-    echo "    > Detected apt (Debian/Ubuntu)."
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y > /dev/null 2>&1
-    apt-get install -y xtables-addons-common xtables-addons-dkms openssl mokutil libc6:i386 \
-                       linux-headers-$(uname -r) linux-tools-$(uname -r) linux-tools-common \
-                       xdp-tools bpftool bpfilter bpfilter-devel > /dev/null 2>&1
-    echo "    > Dependencies installed."
-
-elif [ -f /usr/bin/yum ]; then
-    # RHEL/CentOS/Alma
-    echo "    > Detected yum (RHEL/CentOS)."
-    yum install -y epel-release > /dev/null 2>&1
-    yum install -y xtables-addons-kmod xtables-addons openssl mokutil \
-    glibc.i686 libgcc.i686 libstdc++-devel.i686 \
-                   kernel-devel-$(uname -r) bpftool xdp-tools bpfilter bpfilter-devel > /dev/null 2>&1
-    echo "    > Dependencies installed."
-else
-    echo "    [WARN] Could not detect package manager. Skipping dependency install."
+# 2. Try copying from lib/ folder if it exists (standard structure)
+if [ -d "lib" ]; then
+    cp -afR lib/* /usr/local/csf/lib/
 fi
 
-# Fix Perl Shebang for cPanel (Critical for cPanel servers)
-if [ -e "/usr/local/cpanel/3rdparty/bin/perl" ]; then
-    echo "    > Adjusting Perl shebang for cPanel..."
-    sed -i 's%^#\!/usr/bin/perl%#\!/usr/local/cpanel/3rdparty/bin/perl%' auto.pl cpanel/csf.cgi csf.pl csftest.pl lfd.pl os.pl pt_deleted_action.pl regex.custom.pm webmin/csf/index.cgi
-fi
+# 3. Permissions
+chmod 700 /usr/local/csf/lib
+chmod -R 700 /usr/local/csf/lib/*
+echo " done"
 
-# ==============================================================================
-# PHASE 2: IMMEDIATE MITIGATION & HARDENING
-# ==============================================================================
-echo "Applying Immediate Mitigation..."
-
-# Enable Syncookies
-sysctl -w net.ipv4.tcp_syncookies=1 >/dev/null 2>&1
-if ! grep -q "net.ipv4.tcp_syncookies" /etc/sysctl.conf; then
-    echo "net.ipv4.tcp_syncookies = 1" >> /etc/sysctl.conf
-fi
-sysctl -p >/dev/null 2>&1
-
-# Drop invalid packets (u32 signatures)
-if command -v iptables >/dev/null 2>&1; then
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP 2>/dev/null
-    iptables -A INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP 2>/dev/null
-fi
-
-# ==============================================================================
-# PHASE 3: SECURE BOOT & MODULE SIGNING
-# ==============================================================================
-echo "Checking Secure Boot state..."
-if command -v mokutil >/dev/null 2>&1; then
-    if mokutil --sb-state | grep -q "SecureBoot enabled"; then
-        echo "    > Secure Boot is ENABLED. Running kernel module signer..."
-        # Copy signing script first
-        cp -af rt-sign-module.sh /usr/local/sbin/rt-sign-module.sh
-        chmod 700 /usr/local/sbin/rt-sign-module.sh
-        /usr/local/sbin/rt-sign-module.sh
-    else
-        echo "    > Secure Boot disabled/not supported. Skipping signing."
+# --- 3. Install Core Binaries ---
+echo -n "Installing core binaries..."
+# Helper to find files in root or subfolders
+find_install() {
+    src="$1"
+    dest="$2"
+    if [ -f "$src" ]; then
+        cp -af "$src" "$dest"
+    elif [ -f "cpanel/$src" ]; then
+        cp -af "cpanel/$src" "$dest"
+    elif [ -f "da/$src" ]; then
+        cp -af "da/$src" "$dest"
+    elif [ -f "generic/$src" ]; then
+        cp -af "generic/$src" "$dest"
     fi
-fi
+}
 
-# Load ECHO (Flip Flop Proxy) Module
-modprobe xt_ECHO 2>/dev/null
-if lsmod | grep -q xt_ECHO; then
-    echo "    [+] xt_ECHO module loaded."
-else
-    echo "    [-] xt_ECHO not loaded (XDP will be used as primary defense)."
-fi
-
-# ==============================================================================
-# PHASE 4: CORE INSTALLATION
-# ==============================================================================
-echo -n "Installing core binaries and libraries..."
-cp -af install.txt /etc/csf/
-cp -af csf.pl /usr/sbin/csf
-cp -af lfd.pl /usr/sbin/lfd
-cp -af csf-autotune.sh /usr/sbin/csf-autotune
-cp -afR lib/* /usr/local/csf/lib/
+find_install "csf.pl" "/usr/sbin/csf"
+find_install "lfd.pl" "/usr/sbin/lfd"
 chmod 700 /usr/sbin/csf
 chmod 700 /usr/sbin/lfd
-chmod 700 /usr/sbin/csf-autotune
-chmod 700 /usr/local/csf/lib/ConfigServer/*
 echo " done"
 
-# --- Install Configuration & Blocklists ---
-echo -n "Installing configuration files..."
+# --- 4. Install Revolutionary Technology Tools (From Google Doc) ---
+echo -n "Installing RT Modules..."
+
+# Define the tool list
+TOOLS="csf-autotune.sh csf-firmware-check.sh stressengine.sh rt-sign-module.sh rt-csf-update.sh rt-gsb-poller.sh rt-block-reporter.sh rt-google-ip-updater.pl install-suricata.sh rt-suricata-integrator.pl install-apparmor.sh csf-xdp-loader.sh"
+
+for tool in $TOOLS; do
+    if [ -f "$tool" ]; then
+        cp -af "$tool" "/usr/local/sbin/$tool"
+        chmod 700 "/usr/local/sbin/$tool"
+    fi
+done
+echo " done"
+
+# --- 5. Install Configuration & Profiles ---
+echo -n "Installing configuration..."
 if [ ! -f "/etc/csf/csf.conf" ]; then
-    cp -af csf.conf /etc/csf/csf.conf
+    find_install "csf.conf" "/etc/csf/csf.conf"
     sed -i 's/^TESTING = "0"/TESTING = "1"/' /etc/csf/csf.conf
 fi
-cp -af protection_*.conf /etc/csf/
-cp -af block_all_*.conf /etc/csf/
-cp -af disable_alerts.conf /etc/csf/
-cp -af csf.blocklists /etc/csf/
-cp -af csf.rbls /etc/csf/
-cp -af csf.rblconf /etc/csf/
-cp -af csf.resellers /etc/csf/ 2>/dev/null || touch /etc/csf/csf.resellers
+
+# Install Profiles (Priority to 'profiles' folder, fallback to root)
+if [ -d "profiles" ]; then
+    cp -af profiles/*.conf /usr/local/csf/profiles/ 2>/dev/null
+    cp -af profiles/*.conf /etc/csf/ 2>/dev/null
+else
+    cp -af protection_*.conf /etc/csf/ 2>/dev/null
+    cp -af block_all_*.conf /etc/csf/ 2>/dev/null
+    cp -af disable_alerts.conf /etc/csf/ 2>/dev/null
+fi
+
+# Blocklists & Supporting Files
+find_install "csf.blocklists" "/etc/csf/csf.blocklists"
+find_install "csf.rbls" "/etc/csf/csf.rbls"
+find_install "csf.rblconf" "/etc/csf/csf.rblconf"
+find_install "csf.resellers" "/etc/csf/csf.resellers"
+[ ! -f "/etc/csf/csf.resellers" ] && touch /etc/csf/csf.resellers
+find_install "sanity.txt" "/etc/csf/sanity.txt"
 echo " done"
 
-# --- Install UI Assets ---
+# --- 6. Install UI & Generate Keys ---
 echo -n "Installing UI components..."
-# UI Assets
-if [ ! -d "/etc/csf/ui" ]; then mkdir -p /etc/csf/ui; fi
-cp -af ui/* /etc/csf/ui/
-# Generate fresh SSL keys if they don't exist
+if [ -d "ui" ]; then
+    cp -af ui/* /etc/csf/ui/
+fi
+
+# Run the Titanium Key Generator (Smart Mode)
 if [ -f "make_ui_cert.sh" ]; then
-    # Run the Smart Key Generator (Stunt Mode enabled)
+    echo ""
     sh make_ui_cert.sh
     if [ -f "ui/server.crt" ]; then
         cp -af ui/server.crt /etc/csf/ui/
         cp -af ui/server.key /etc/csf/ui/
         chmod 600 /etc/csf/ui/server.key
     fi
+    echo -n "Resuming..."
 fi
-# Messenger Templates
-cp -af messenger/* /usr/local/csf/tpl/
+
+if [ -d "messenger" ]; then
+    cp -af messenger/* /usr/local/csf/tpl/
+fi
 echo " done"
 
-BLOCK_REPORTER_SCRIPT="rt-block-reporter.sh"
-BLOCK_REPORTER_DEST="/usr/local/sbin/rt-block-reporter.sh"
-BLOCK_REPORTER_CRON="/etc/cron.hourly/rt-block-reporter" 
-
-# --- Install Google Block Reporter ---
-    if [ ! -f "$BLOCK_REPORTER_SCRIPT" ]; then
-        print "    ${redl}[ERROR]${greym} $BLOCK_REPORTER_SCRIPT not found. Skipping Block Reporter."
-    else
-        cp "$BLOCK_REPORTER_SCRIPT" "$BLOCK_REPORTER_DEST"
-         if [ $? -eq 0 ]; then
-            chmod +x "$BLOCK_REPORTER_DEST"
-            print "    [OK] Block Reporter installed to $BLOCK_REPORTER_DEST"
-            
-            echo "    > Creating hourly cron job for Block Reporter..."
-            ln -sf "$BLOCK_REPORTER_DEST" "$BLOCK_REPORTER_CRON"
-            chmod +x "$BLOCK_REPORTER_CRON"
-            print "    [OK] Block Reporter cron job created."
-        else
-            print "    ${redl}[ERROR]${greym} Failed to copy $BLOCK_REPORTER_SCRIPT."
-        fi
-    fi
-
-# AppArmor (Application Awareness)
-if [ -f "install-apparmor.sh" ]; then
-    # Create profiles directory structure
-    mkdir -p profiles
-    
-    # Move ALL profile files (usr.sbin.*) into the folder
-    # This handles existing ones (sshd, httpd) AND new ones (named, php-fpm, etc.)
-    if ls usr.sbin.* >/dev/null 2>&1; then
-        mv usr.sbin.* profiles/
-    fi
-    
-    chmod 700 install-apparmor.sh
-    ./install-apparmor.sh
-fi
-
-# ==============================================================================
-# PHASE 5: REVOLUTIONARY TECHNOLOGY TOOLS (XDP, Google, ModSec)
-# ==============================================================================
-echo "Installing Revolutionary Technology Tools..."
-
-# 1. Stress Engine
-mkdir -p -m 0755 /usr/local/include/csf/pre.d/
-if [ -f "stressengine.sh" ]; then
-    cp -avf stressengine.sh /usr/local/include/csf/pre.d/
-    cp -avf stressengine.sh /usr/local/sbin/stressengine.sh
-    chmod 700 /usr/local/include/csf/pre.d/*.sh
-    chmod 700 /usr/local/sbin/stressengine.sh
-    echo "    [OK] Stress Engine installed."
-fi
-
-# 2. XDP Shield Loader
-if [ -f "csf-xdp-loader.sh" ]; then
-    cp "csf-xdp-loader.sh" "/usr/local/sbin/csf-xdp-loader.sh"
-    chmod 700 "/usr/local/sbin/csf-xdp-loader.sh"
-    
-    # Create Systemd Service
-    if [ -d "/etc/systemd/system" ]; then
-        cat << EOF > /etc/systemd/system/csf-xdp-loader.service
-[Unit]
-Description=Revolutionary Technology XDP DDoS Filter Loader
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/csf-xdp-loader.sh start
-ExecStop=/usr/local/sbin/csf-xdp-loader.sh stop
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        systemctl daemon-reload
-        systemctl enable csf-xdp-loader.service >/dev/null 2>&1
-        echo "    [OK] XDP Shield Service installed."
-    fi
-fi
-
-# 3. Google IP Updater
-if [ -f "rt-google-ip-updater.pl" ]; then
-    cp "rt-google-ip-updater.pl" "/usr/local/sbin/rt-google-ip-updater.pl"
-    chmod 700 "/usr/local/sbin/rt-google-ip-updater.pl"
-    
-    # Add Google ASNs to allow list immediately
-    grep -q "ASN:15169" /etc/csf/csf.allow || echo "ASN:15169 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:36040" /etc/csf/csf.allow || echo "ASN:36040 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:43515" /etc/csf/csf.allow || echo "ASN:43515 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:36561" /etc/csf/csf.allow || echo "ASN:36561 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:19527" /etc/csf/csf.allow || echo "ASN:19527 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:139070" /etc/csf/csf.allow || echo "ASN:139070 # Google ASN" >> /etc/csf/csf.allow
-    grep -q "ASN:396982" /etc/csf/csf.allow || echo "ASN:396982 # Google ASN" >> /etc/csf/csf.allow
-    
-    # Create Cron
-    echo "$(shuf -i 0-59) $(shuf -i 3-5) * * * root /usr/local/sbin/rt-google-ip-updater.pl > /dev/null 2>&1" > /etc/cron.d/rt-google-ip-updater
-    echo "    [OK] Google IP Updater installed."
-fi
-
-# 4. ModSec3 Bridge
-if [ -f "/etc/apache2/logs/modsec_audit.log" ] || [ -f "/var/log/modsec_audit.json" ]; then
-    # Generate script
-    cat << 'EOF' > /usr/local/sbin/modsec3_converter.pl
-#!/usr/bin/perl
-use strict;
-use warnings;
-use File::Tail;
-use JSON::MaybeXS;
-use Fcntl qw(:flock);
-use POSIX qw(strftime);
-my $MODSEC3_LOG = "/var/log/modsec_audit.json";
-my $CSF_COMPAT_LOG = "/var/log/modsec_compat.log";
-# Auto-detect path
-if (-f "/etc/apache2/logs/modsec_audit.log") { $MODSEC3_LOG = "/etc/apache2/logs/modsec_audit.log"; }
-elsif (-f "/var/log/httpd/modsec_audit.log") { $MODSEC3_LOG = "/var/log/httpd/modsec_audit.log"; }
-open(my $out_fh, ">>", $CSF_COMPAT_LOG) or die "Cannot open output: $!";
-$out_fh->autoflush(1);
-my $json = JSON::MaybeXS->new(utf8 => 1, allow_nonref => 1);
-my $file = File::Tail->new(name => $MODSEC3_LOG, maxinterval => 5, adjustafter => 10);
-while (defined(my $line = $file->read)) {
-    my $data;
-    eval { $data = $json->decode($line); };
-    if ($@) { next; }
-    my $ip = $data->{'transaction'}->{'client_ip'};
-    my $msgs = $data->{'transaction'}->{'messages'} || [];
-    foreach my $msg (@$msgs) {
-         my $sev = $msg->{'details'}->{'severity'} // "INFO";
-         if ($sev eq "CRITICAL" || $sev eq "ERROR") {
-             my $t = strftime("%a %b %d %H:%M:%S %Y", localtime);
-             print $out_fh "[$t] [error] [client $ip] ModSecurity: " . ($msg->{'message'} || "") . "\n";
-         }
-    }
-}
-EOF
-    chmod 700 /usr/local/sbin/modsec3_converter.pl
-    
-    # Service
-    cat << EOF > /etc/systemd/system/modsec3-converter.service
-[Unit]
-Description=Revolutionary Technology: ModSecurity 3 Converter
-After=network.target
-[Service]
-Type=simple
-ExecStart=/usr/local/sbin/modsec3_converter.pl
-Restart=always
-User=root
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl enable modsec3-converter.service >/dev/null 2>&1
-    # Update csf.conf to use new log
-    sed -i 's#^MODSEC_LOG = ".*"#MODSEC_LOG = "/var/log/modsec_compat.log"#' /etc/csf/csf.conf
-    echo "    [OK] ModSec3 Bridge installed."
-fi
-
-# ==============================================================================
-# PHASE 6: CONTROL PANEL INTEGRATION
-# ==============================================================================
+# --- 7. Control Panel Integration (cPanel Fix) ---
 
 # cPanel
 if [ -d "/usr/local/cpanel" ]; then
     echo -n "Detected cPanel... Installing WHM plugin..."
-    cp -af csf.cgi /usr/local/cpanel/whostmgr/docroot/cgi/configserver/
-    cp -af csf.conf /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/
+    
+    # Determine source folder for cPanel files
+    CP_SRC="."
+    if [ -d "cpanel" ]; then CP_SRC="cpanel"; fi
+    
+    mkdir -p /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf
+    
+    # Install CGI (The Menu)
+    cp -af $CP_SRC/csf.cgi /usr/local/cpanel/whostmgr/docroot/cgi/configserver/
+    chmod 700 /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf.cgi
+    
+    # Install Config
+    cp -af $CP_SRC/csf.conf /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/
+    
     # Install Drivers
     if [ -d "/usr/local/cpanel/Cpanel/Config/ConfigObj/Driver" ]; then
         mkdir -p /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf
-        cp -af ConfigServercsf.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/
-        cp -af META.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf/
+        # Look for driver in root OR cpanel/Driver folder
+        if [ -f "$CP_SRC/Driver/ConfigServercsf.pm" ]; then
+            cp -af $CP_SRC/Driver/ConfigServercsf.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/
+            cp -af $CP_SRC/Driver/ConfigServercsf/META.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf/
+        else
+            # Fallback to root
+            cp -af ConfigServercsf.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ 2>/dev/null
+            cp -af META.pm /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf/ 2>/dev/null
+        fi
     fi
+    
     # Register App
     if [ -x "/usr/local/cpanel/bin/register_appconfig" ]; then
         /usr/local/cpanel/bin/register_appconfig /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/csf.conf
@@ -343,94 +188,84 @@ fi
 # DirectAdmin
 if [ -d "/usr/local/directadmin" ]; then
     echo -n "Detected DirectAdmin... Installing plugin..."
-    if [ -d "/usr/local/directadmin/plugins" ]; then
-        mkdir -p /usr/local/directadmin/plugins/csf/scripts
-        mkdir -p /usr/local/directadmin/plugins/csf/exec
-        cp -af directadmin/* /usr/local/directadmin/plugins/csf/
-        chmod 755 /usr/local/directadmin/plugins/csf/scripts/*
-        
-        # Compile C wrapper if gcc is available
-        if [ -f "csf.c" ] && command -v gcc >/dev/null 2>&1; then
-             echo "    > Compiling DirectAdmin SetUID wrapper..."
-             gcc -o /usr/local/directadmin/plugins/csf/index.cgi csf.c
-             chmod 4755 /usr/local/directadmin/plugins/csf/index.cgi
-             cp -af /usr/local/directadmin/plugins/csf/index.cgi /usr/local/directadmin/plugins/csf/exec/da_csf.cgi
-        fi
-    fi
-    echo " done"
-fi
-
-# Webmin
-if [ -d "/usr/libexec/webmin" ] || [ -d "/usr/share/webmin" ]; then
-    echo -n "Detected Webmin... Installing module..."
-    # Assuming standard webmin install path
-    WEBMIN_DIR="/usr/libexec/webmin"
-    if [ -d "/usr/share/webmin" ]; then WEBMIN_DIR="/usr/share/webmin"; fi
+    mkdir -p /usr/local/directadmin/plugins/csf/scripts
+    mkdir -p /usr/local/directadmin/plugins/csf/exec
     
-    mkdir -p $WEBMIN_DIR/csf
-    cp -af webmin/csf/* $WEBMIN_DIR/csf/
-    echo " done"
-fi
-
-# InterWorx
-if [ -d "/usr/local/interworx" ]; then
-    echo -n "Detected InterWorx... Installing plugin..."
-    mkdir -p /usr/local/interworx/plugins/configservercsf
-    cp -af interworx/* /usr/local/interworx/plugins/configservercsf/
-    # Fix Permissions
-    chown -R iworx:iworx /usr/local/interworx/plugins/configservercsf
-    chmod 755 /usr/local/interworx/plugins/configservercsf/lib/*.pl
-    echo " done"
-fi
-
-# VestaCP
-if [ -d "/usr/local/vesta" ]; then
-    echo -n "Detected VestaCP... Installing plugin..."
-    if [ -d "/usr/local/vesta/web/list" ]; then
-        mkdir -p /usr/local/vesta/web/list/csf
-        cp -af vesta/* /usr/local/vesta/web/list/csf/
+    DA_SRC="."
+    if [ -d "da" ]; then DA_SRC="da"; fi
+    
+    cp -af $DA_SRC/* /usr/local/directadmin/plugins/csf/ 2>/dev/null
+    chmod 755 /usr/local/directadmin/plugins/csf/scripts/*
+    
+    # Compile Wrapper
+    if [ -f "csf.c" ] && command -v gcc >/dev/null 2>&1; then
+         gcc -o /usr/local/directadmin/plugins/csf/index.cgi csf.c
+         chmod 4755 /usr/local/directadmin/plugins/csf/index.cgi
+         cp -af /usr/local/directadmin/plugins/csf/index.cgi /usr/local/directadmin/plugins/csf/exec/da_csf.cgi
     fi
     echo " done"
 fi
 
-# ==============================================================================
-# PHASE 7: FINALIZATION (Service Registration)
-# ==============================================================================
-
+# --- 8. Service Registration ---
 if [ -d "/etc/systemd/system" ]; then
     echo -n "Registering systemd services..."
-    cp -af lfd.service /etc/systemd/system/
-    cp -af csf.service /etc/systemd/system/ 2>/dev/null
+    find_install "lfd.service" "/etc/systemd/system/lfd.service"
+    find_install "csf.service" "/etc/systemd/system/csf.service"
+    
+    # Register RT Services
+    if [ -f "/usr/local/sbin/csf-xdp-loader.sh" ]; then
+        cat << EOF > /etc/systemd/system/csf-xdp-loader.service
+[Unit]
+Description=Revolutionary Technology XDP DDoS Filter Loader
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/csf-xdp-loader.sh start
+ExecStop=/usr/local/sbin/csf-xdp-loader.sh stop
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl enable csf-xdp-loader.service >/dev/null 2>&1
+    fi
+    
     systemctl daemon-reload
     systemctl enable csf.service >/dev/null 2>&1
     systemctl enable lfd.service >/dev/null 2>&1
     echo " done"
 else
-    # Fallback for init.d
     echo -n "Registering init.d services..."
-    cp -af lfd.sh /etc/init.d/lfd
-    cp -af csf.sh /etc/init.d/csf
+    find_install "lfd.sh" "/etc/init.d/lfd"
+    find_install "csf.sh" "/etc/init.d/csf"
     chmod 755 /etc/init.d/csf
     chmod 755 /etc/init.d/lfd
     if [ -x "/sbin/chkconfig" ]; then
         /sbin/chkconfig --add csf
         /sbin/chkconfig --add lfd
-    elif [ -x "/usr/sbin/update-rc.d" ]; then
-        update-rc.d csf defaults
-        update-rc.d lfd defaults
     fi
     echo " done"
 fi
 
-# Permissions
-chmod 600 /etc/csf/csf.conf
-chmod 700 /etc/csf/*.sh /etc/csf/*.pl
+# --- 9. Register RT Crons ---
+if [ -f "/usr/local/sbin/rt-google-ip-updater.pl" ]; then
+    echo "$(shuf -i 0-59 -n 1) $(shuf -i 3-5 -n 1) * * * root /usr/local/sbin/rt-google-ip-updater.pl > /dev/null 2>&1" > /etc/cron.d/rt-google-ip-updater
+fi
+if [ -f "/usr/local/sbin/rt-block-reporter.sh" ]; then
+    ln -sf /usr/local/sbin/rt-block-reporter.sh /etc/cron.hourly/rt-block-reporter
+fi
 
-# Hardware Auto-Tune
-if [ -x "/usr/sbin/csf-autotune" ]; then
+# --- 10. Final Permission Fixes ---
+chmod 600 /etc/csf/csf.conf
+chmod 600 /etc/csf/*.conf
+chmod 700 /etc/csf/*.sh 2>/dev/null
+chmod 700 /etc/csf/*.pl 2>/dev/null
+
+# --- 11. Hardware Acceleration (Auto-Tune) ---
+if [ -x "/usr/local/sbin/csf-autotune.sh" ]; then
     echo ""
-    echo "Running Hardware Auto-Tuner..."
-    /usr/sbin/csf-autotune
+    echo "Running Revolutionary Technology Hardware Auto-Tuner..."
+    /usr/local/sbin/csf-autotune.sh
 fi
 
 echo ""
