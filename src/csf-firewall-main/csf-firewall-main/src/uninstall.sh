@@ -42,11 +42,15 @@ else
     rm -fv /etc/init.d/lfd
 fi
 
-if [ -e "/usr/local/cpanel/bin/unregister_appconfig" ]; then
+# Clean up cPanel AppConfig Registration
+if [ -x "/usr/local/cpanel/bin/unregister_appconfig" ]; then
+    echo "Unregistering from cPanel WHM..."
     cd /
-	/usr/local/cpanel/bin/unregister_appconfig csf
+	/usr/local/cpanel/bin/unregister_appconfig csf >/dev/null 2>&1
+    /usr/local/cpanel/bin/unregister_appconfig /usr/local/cpanel/bin/csf.conf.appconfig >/dev/null 2>&1
 fi
 
+# Clean up standard CSF/LFD files
 rm -fv /etc/chkserv.d/lfd
 rm -fv /usr/sbin/csf
 rm -fv /usr/sbin/lfd
@@ -56,6 +60,20 @@ rm -fv /etc/cron.d/csf-cron
 rm -fv /etc/logrotate.d/lfd
 rm -fv /usr/local/man/man1/csf.man.1
 
+# Clean up Custom Gemini AI Integration Files
+echo "Cleaning up Custom AI Integrations..."
+rm -fv /etc/csf/csf_gemini_manager.py
+rm -fv /etc/csf/gemini_optimizer.pause
+rm -fv /var/log/csf_gemini.log
+rm -fv /var/log/csf_gemini_cron.log
+
+# Safely remove the Gemini Nightly Cron Job
+if command -v crontab >/dev/null 2>&1; then
+    crontab -l 2>/dev/null | grep -v 'csf_gemini_manager.py --nightly' | crontab -
+    echo "Removed Gemini AI cron job from crontab."
+fi
+
+# Clean up cPanel UI artifacts
 /bin/rm -fv /usr/local/cpanel/whostmgr/docroot/cgi/addon_csf.cgi
 /bin/rm -Rfv /usr/local/cpanel/whostmgr/docroot/cgi/csf
 
@@ -66,9 +84,12 @@ rm -fv /usr/local/man/man1/csf.man.1
 /bin/rm -Rfv /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf
 /bin/touch /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver
 
+# Clean up chkservd monitor
 rm -fv /var/run/chkservd/lfd
 sed -i 's/lfd:1//' /etc/chkserv.d/chkservd.conf
-/scripts/restartsrv_chkservd
+if [ -x "/scripts/restartsrv_chkservd" ]; then
+    /scripts/restartsrv_chkservd >/dev/null 2>&1
+fi
 
 rm -Rfv /etc/csf /usr/local/csf /var/lib/csf
 
