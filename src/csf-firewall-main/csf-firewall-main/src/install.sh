@@ -1,57 +1,9 @@
-#!/bin/sh
-# #
-#   @app                ConfigServer Firewall & Security (CSF)
-#                       Login Failure Daemon (LFD)
-#   @website            https://configserver.dev
-#   @docs               https://docs.configserver.dev
-#   @download           https://download.configserver.dev
-#   @repo               https://github.com/Aetherinox/csf-firewall
-#   @copyright          Copyright (C) 2025-2026 Aetherinox
-#                       Copyright (C) 2006-2025 Jonathan Michaelson
-#                       Copyright (C) 2006-2025 Way to the Web Ltd.
-#   @license            GPLv3
-#   @updated            10.11.2025
-#   
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 3 of the License, or (at
-#   your option) any later version.
-#   
-#   This program is distributed in the hope that it will be useful, but
-#   WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-#   General Public License for more details.
-#   
-#   You should have received a copy of the GNU General Public License
-#   along with this program; if not, see <https://www.gnu.org/licenses>.
-# #
-
-# #
-#   @script     ConfigServer Security & Firewall Installer
-#   @desc       determines the users distro and (if any) control panel, launches correct installer sub-script
-#   
-#   @usage      Normal install          sh install.sh
-#               Dryrun install          sh install.sh --dryrun
-# #
-
-# #
-#	Allow for execution from different relative directories
-# #
-
 case $0 in
     /*) script="$0" ;;                       # Absolute path
     *)  script="$(pwd)/$0" ;;                # Relative path
 esac
 
-# #
-#	Find script directory
-# #
-
 script_dir=$(dirname "$script")
-
-# #
-#   Include global
-# #
 
 . "$script_dir/global.sh" ||
 {
@@ -59,23 +11,13 @@ script_dir=$(dirname "$script")
     exit 1
 }
 
-# #
-#    Change working directory
-# #
 
 cd "$script_dir" || exit 1
-
-# #
-#   Define › Args
-# #
 
 argDryrun="false"				# runs the logic but doesn't actually install; no changes
 argDetect="false"				# returns the installer name + desc that would have ran, but exits; no changes
 argLegacy="false"				# certain actions will work how pre CSF v15.01 did 
 
-# #
-#   Func › Usage Menu
-# #
 
 opt_usage( )
 {
@@ -108,9 +50,6 @@ opt_usage( )
     echo
 }
 
-# #
-#   Args › Parse
-# #
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -143,31 +82,17 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
-# #
-#	Runs the requested installer
-#	
-#	@arg 			installerFile				Install script to run
-#	@arg 			installerDesc				Brief description for the user
-#	@usage			run_installer "install.cpanel.sh" "csf cPanel installer"
-# #
 
 run_installer()
 {
     installer="$1"
     description="$2"
 
-	# #
-	#	Detect; but do not run
-	# #
 
     if [ "$argDetect" = "true" ]; then
 		ok "    Detected Installer: ${greenl}$script_dir/$installer${greym} ($description) "
 		exit 0
 	fi
-
-	# #
-	#	Dryrun; or run chosen installer script
-	# #
 
     if [ "$argDryrun" = "true" ]; then
 		ok "    Dryrun flag specified; skipped installer ${greenl}$script_dir/$installer${greym} "
@@ -186,9 +111,6 @@ run_installer()
     fi
 }
 
-# #
-#   Define which installation script to run
-# #
 
 if [ -e "/usr/local/cpanel/version" ]; then
     run_installer "install.cpanel.sh" "cPanel"
@@ -243,5 +165,44 @@ if ($line =~ /TCP Listener: Malformed tactical track payload dropped from (\d+\.
 EOF
 fi
 
+# ====================================================================
+# UNIVAC AEGIS BRIDGE INTEGRATION HOOK
+# ====================================================================
+echo "Configuring Univac Aegis Bridge telemetry nodes..."
+
+# 1. Ensure the Aegis log exists so LFD does not fail to start on boot
+touch /var/log/aegis_bridge.log
+chmod 640 /var/log/aegis_bridge.log
+
+# 2. Inject Aegis Tactical Ports into the live csf.conf
+sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf
+sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf
+
+# 3. Configure Connection Tracking for Aegis DDS limits
+sed -i 's/^CT_LIMIT = .*$/CT_LIMIT = "150"/' /etc/csf/csf.conf
+sed -i 's/^CT_PORTS = .*$/CT_PORTS = "7400:7500,9999"/' /etc/csf/csf.conf
+
+# 4. Map CUSTOM1_LOG to Aegis telemetry
+sed -i 's|^CUSTOM1_LOG = .*$|CUSTOM1_LOG = "/var/log/aegis_bridge.log"|' /etc/csf/csf.conf
+
+# 5. Inject LFD Regex Rules for Aegis Audits into regex.custom.pm
+# We use grep to ensure we don't append it twice on reinstall/upgrade
+if ! grep -q "Aegis Shore Audit" /usr/local/csf/bin/regex.custom.pm; then
+cat << 'EOF' >> /usr/local/csf/bin/regex.custom.pm
+
+# --- START UNIVAC AEGIS BRIDGE RULES ---
+if ($line =~ /Aegis Shore Audit: Unauthorized command sequence from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Unauthorized Command", $1, "aegis_bridge", "1", "86400");
+}
+
+if ($line =~ /TCP Listener: Malformed tactical track payload dropped from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Malformed Payload", $1, "aegis_bridge", "3", "3600");
+}
+# --- END UNIVAC AEGIS BRIDGE RULES ---
+EOF
+fi
+
+echo "Aegis Bridge integrated successfully."
+# ====================================================================
 echo "Aegis Bridge integrated successfully."
 # ====================================================================
