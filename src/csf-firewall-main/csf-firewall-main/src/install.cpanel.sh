@@ -520,10 +520,13 @@ cp -avf cpanel/upgrade.sh /usr/local/cpanel/whostmgr/docroot/cgi/configserver/cs
 chmod 700 /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/upgrade.sh
 
 if [ -e "/usr/local/cpanel/bin/register_appconfig" ]; then
-    /bin/cp -af /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/Driver/* /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/
+    /bin/cp -af /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/Driver/* /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ >/dev/null 2>&1
     /bin/touch /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver
 
+    # ALWAYS unregister first to rebuild WHM cache and prevent menu corruption
+    /usr/local/cpanel/bin/unregister_appconfig csf >/dev/null 2>&1
     /usr/local/cpanel/bin/register_appconfig /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/csf.conf
+
     /bin/rm -f /usr/local/cpanel/whostmgr/docroot/cgi/addon_csf.cgi
     /bin/rm -Rf /usr/local/cpanel/whostmgr/docroot/cgi/csf
 else
