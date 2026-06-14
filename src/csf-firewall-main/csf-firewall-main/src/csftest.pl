@@ -37,6 +37,37 @@ our ($return, $fatal, $error);
 $fatal = 0;
 $error = 0;
 
+print "Starting csf sanity check...\n\n";
+
+# --- START ENVIRONMENT SANITY CHECKS ---
+# Check if iptables binary exists
+if (!-e "/sbin/iptables") {
+    print "FATAL: /sbin/iptables does not exist. Please install iptables.\n";
+    exit 1;
+}
+
+# Check for conflicting firewall managers (Firewalld / UFW)
+my $firewalld_status = `systemctl is-active firewalld 2>/dev/null`;
+chomp($firewalld_status);
+if ($firewalld_status eq "active") {
+    print "========================================================================\n";
+    print " WARNING: firewalld is currently running!\n";
+    print " This will lock the iptables tables and cause FATAL errors below.\n";
+    print " Fix: systemctl stop firewalld && systemctl disable firewalld\n";
+    print "========================================================================\n\n";
+}
+
+my $ufw_status = `systemctl is-active ufw 2>/dev/null`;
+chomp($ufw_status);
+if ($ufw_status eq "active") {
+    print "========================================================================\n";
+    print " WARNING: UFW is currently running!\n";
+    print " This will lock the iptables tables and cause FATAL errors below.\n";
+    print " Fix: systemctl stop ufw && systemctl disable ufw\n";
+    print "========================================================================\n\n";
+}
+# --- END ENVIRONMENT SANITY CHECKS ---
+
 #my @modules = ("ip_tables","ipt_state","ipt_multiport","iptable_filter","ipt_limit","ipt_LOG","ipt_REJECT","ipt_conntrack","ip_conntrack","ip_conntrack_ftp","iptable_mangle","ip_tables","xt_state","xt_multiport","iptable_filter","xt_limit","ipt_LOG","ipt_REJECT","ip_conntrack_ftp","iptable_mangle","xt_conntrack");
 #push @modules,"ipt_owner";
 #push @modules,"xt_owner";
