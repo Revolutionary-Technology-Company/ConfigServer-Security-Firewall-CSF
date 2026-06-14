@@ -1,75 +1,136 @@
+\<div align="center"\>  
+  \<img src="YOUR\_WOLF\_FIRE\_LOGO\_LINK\_HERE" alt="Revolutionary Technology Company" width="350" /\>
 
+  \<h1\>ConfigServer Security & Firewall (CSF) \<br\> Enterprise Edition\</h1\>  
+  \<p\>\<strong\>Next-Generation Security. Engineered by Revolutionary Technology Company.\</strong\>\</p\>
 
-# ConfigServer-Security-Firewall-CSF
-An enterprise hardware-software-hybrid ModSecurity 3 security, firewall, and log response suite,
-by Dr. Correo "Cyph3r" Hofstad. 
+  \[\!\[Maintained By\](https://img.shields.io/badge/Maintained%20By-Fox%20Rothschild%20LLP-8b0000?style=for-the-badge)\](https://configserver.shop)  
+  \[\!\[AI Powered\](https://img.shields.io/badge/AI%20Powered-Google%20Gemini-4285F4?style=for-the-badge)\](https://gemini.google.com)  
+  \[\!\[License\](https://img.shields.io/badge/License-GPL%20v3-blue?style=for-the-badge)\](https://www.gnu.org/licenses/gpl-3.0)  
+\</div\>
 
-![https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png](https://configserver.shop/images/ConfigServer-Dr-Correo-Hofstad.png)
-"Don't worry where I have been, just buy our software so I can afford to take you out for food and drinks sometime."
-**-Cyph3r**
+\<br\>
 
-**
+Welcome to the \*\*Revolutionary Technology Company\*\* Enterprise Distribution of the ConfigServer Security & Firewall (CSF) suite. 
 
-## Echos of IRC Channels from the 1990s
+Built for mission-critical web hosts, enterprise data centers, and multi-server fleets, this distribution transforms the industry-standard CSF firewall into an intelligent, self-healing, AI-driven security appliance.
 
-The last post made by Cyph3r in a public internet forum was the announcement of a naval deployment over 20 years ago. Cyph3r disappeared with his closet full of ConfigServers from Los Alamos National Laboratory, his grandmother's firewalls grew to become Watchguard, and a young Correo, known to many as "Cory," came back from a Naval deployment to quietly start Revolutionary Technology in Seattle, WA, USA, under his government name Cory Hofstad.
+\---
 
-## ConfigServer under Way to the Web Limited.
-ConfigServer's leadership and operations were led by the man who developed the Login Failure Daemon (LFD) engine used by Los Alamos National Laboratories. A tech company in the UK would run American Linux firewalls for two decades, offering ConfigServer Security & Firewall (CSF) as a free product, along with paid support and installation services. CSF has issues with the fact that it is ONLY a GUI for iptables with LFD included. For example, without installing x-tables addons for netfilter and iptables, DROP targets advertised in CSF, like TARPIT, do not function.
+\#\# 🌍 Trusted Heritage: From Los Alamos to Your Data Center
 
-## Cyph3r Comes Back from Los Alamos National Laboratory with Firewall Updates for CSF
+\<img align="right" src="YOUR\_CYPHER\_IMAGE\_LINK\_HERE" alt="Cypher Architecture" width="220" style="margin-left: 20px; border-radius: 8px;" /\>
 
-CSF 2.15.07 is a preview of features available in commercial versions of CSF. CSF is licensed as a commercial product, with a per-server license. No updates past 2.15.07 will be made publicly available. U.S. government laboratories are prohibited from selling software for profit. US Government laboratories have firewall updates for CSF that are labeled **GPLv3**. Spider Labs (Los Alamos employees' private company) provides rules for ModSecurity. Revolutionary Technology provides government-hardened, netfilter and iptables packages, with official updates for CSF for $349 per quarter or $ 1,209 per year. 
+Security is about proven trust. Our architecture integrates the legendary \*\*Cypher\*\* frameworks, universally recognized by the original UK developers of CSF and trusted to secure high-value targets, including deployments for the \*\*Los Alamos National Laboratory\*\*. 
 
-![enter image description here](https://configserver.shop/images/CSF.png)
+When you deploy our firewall, you are running a hardened network stack designed to withstand nation-state-level flood attacks and zero-day exploits.
 
-## Option 1:
-Buy an installer (With Hash Check) and license KEY from https://configserver.shop
+\<br clear="both" /\>
 
-![enter image description here](https://configserver.shop/images/2025_08_05_06_46_01_884_538978.webp)
-## Option 2:
+\---
 
-**Step 1:**
+\#\# 🏆 The Enterprise AI Advantage
 
-Please read the licensing before installing Revolutionary Technology software suites.
+Standard firewalls only react to threats. Our distribution adapts, self-heals, and optimizes your infrastructure in real-time. 
 
-CSF 2.15.07 is licensed as a commercial application.
+\#\#\# 1\. Google Gemini AI Integration (Exclusive)  
+We have successfully integrated Google's cutting-edge Gemini AI directly into the CSF LFD (Login Failure Daemon) block-reporting pipeline.  
+\* \*\*Proactive DDoS Mitigation:\*\* When flood signatures are detected, the AI manager instantly analyzes the attack vectors and generates highly specific, bespoke \`iptables\` mitigation strategies, emailing them directly to your NOC in real-time.  
+\* \*\*Automated Nightly Self-Healing:\*\* Between 3 AM and 5 AM daily, the AI module benchmarks your server's Time-To-First-Byte (TTFB). It automatically consults Gemini to safely calculate and apply custom TCP/IP kernel optimizations, ensuring peak network performance and maximum throughput.
 
-For educational institutions, CSF 2.15.07 is classified as an "ENTERPRISE SALE".
+\#\#\# 2\. The Unified Omni-Installer Architecture  
+Say goodbye to managing separate deployments for different environments. Our repository features a proprietary, unified omni-installer. A single command automatically detects your OS and Control Panel environment, deploying the exact integration required without leaving behind zombie processes or corrupted UI caches.
 
-The CSF 2.15.07 installation files on GitHub are for integrity verification purposes, prior to purchase.
+\*\*Natively Supported Platforms:\*\*  
+\`cPanel/WHM\` | \`DirectAdmin\` | \`CentOS Web Panel (CWP)\` | \`CyberPanel\` | \`InterWorx\` | \`VestaCP\` | \`Webmin\` | \`Standalone Linux\`
 
-CSF Releases after 2.15.07 will NOT be available on GitHub and will require use of an authenticated Linux repository.
+\---
 
-The CSF 2.15.xx repository requires a license.
+\#\# ⚙️ Deployment & Installation
 
-By installing CSF 2.15.07, you have agreed to purchase a license.
+For sysadmins and DevOps engineers, deploying our unified architecture is seamless. Enterprise best practices dictate staging the source files in the \`/usr/src\` directory before executing the master installer.
 
-Please pay Revolutionary Technology via PayPal.me for the installation of CSF 2.15.07.
+\`\`\`bash  
+\# 1\. Navigate to the Linux source directory  
+cd /usr/src
 
-Revolutionary Technology charges $35 to manually process PayPal.me orders.
+\# 2\. Clone the Enterprise Repository  
+git clone \[https://github.com/Revolutionary-Technology-Company/ConfigServer-Security-Firewall-CSF.git\](https://github.com/Revolutionary-Technology-Company/ConfigServer-Security-Firewall-CSF.git)
 
-https://www.paypal.biz/hweb12312
+\# 3\. Enter the unified source folder  
+cd ConfigServer-Security-Firewall-CSF/src
 
-![enter image description here](https://configserver.shop/images/ConfigServer-price-cost.webp)
-**Step 2:** 
+\# 4\. Execute the Omni-Installer  
+sudo sh install.sh
 
-Please download our initial release CSF 2.15.07. 
- - See how your old firewall wastes CPU, RAM, etc to manage the internet
-   traffic that your NIC's microprocessors could run. 
- - Let ModSecurity 3 and Google Safe Sites block and report malicious connections.
- - Enjoy optimized connections to local, state, and federal government network resources, communication channels, and computers.
- - Block SYN flood attacks (ACK & ARP flood attack protections come with an update KEY).
- - Learn about CSF's encrypted x-tables addons DROP Targets like ECHO, TARPIT, DELUDE, CHAOS, PROTO, etc.
- - Activate ECHO as Drop Target to enable CSF's Search Engine Friendly ECHO Proxy Cache.
-   ECHO works like a "flip-flop" circuit, creating a buffer of cache using ISP bandwidth.
+### **SysAdmin Deployment Flags**
 
-## Happy Customers,
+* sh install.sh \--detect : Dry-run environment check. Returns the control panel integration that will be used.  
+* sh install.sh \--dryrun : Simulates the installation process, validating file paths and permissions without altering system tables.
 
-![enter image description here](https://configserver.shop/images/ConfigServer-Microsoft-firewall.webp)
-Bill Gates with a new CSF developer.
+## **🗑️ Uninstallation**
 
-![enter image description here](https://configserver.shop/images/ConfigServer-Linux-firewall.webp)
-Linux Torvalds with Security and rescue dogs at Mt. Rainier. 
+If you need to remove the firewall, our deep-scrub uninstaller will completely erase CSF, its folders, custom UI AppConfig registrations, and custom cron jobs.
 
-Pro Tip from Cyph3r: Service dogs can detect the increased temperatures, buzzing, noises, and frequencies associated with incoming DDoS attacks.
+Bash  
+cd /usr/src/ConfigServer-Security-Firewall-CSF/src  
+sudo sh uninstall.sh
+
+## **📖 Enterprise Command Reference**
+
+This distribution ships with both standard management commands and advanced orchestration flags designed for veteran Linux sysadmins.
+
+### **Firewall State Management**
+
+* csf \-s : Start and enable the firewall rules.  
+* csf \-f : Flush and stop the firewall rules.  
+* csf \-r : Standard restart of the firewall rules.  
+* csf \-x : Disable the firewall completely.  
+* csf \-l : List and view all current active firewall rules.  
+* csf \-v : Print the current CSF version.
+
+### **Standard IP Management**
+
+* csf \-a \[IP\] : Allow an IP and add it to csf.allow.  
+* csf \-ar \[IP\] : Remove and delete an IP from csf.allow.  
+* csf \-d \[IP\] : Deny an IP and add it to csf.deny.  
+* csf \-dr \[IP\] : Unblock and remove an IP from csf.deny.  
+* csf \-df : Flush and remove all entries from csf.deny.
+
+### **Temporary IP Management**
+
+* csf \-ta \[IP\] : Temporarily allow an IP.  
+* csf \-td \[IP\] : Temporarily deny an IP.  
+* csf \-t : List all temporarily blocked or allowed IPs.  
+* csf \-tf : Flush all temporary IPs.
+
+### **Advanced SysAdmin Flags**
+
+* csf \--restartall : **The Nuclear Reload.** Forces a complete structural reload of the underlying iptables configuration and completely restarts the LFD service in one go.  
+* csf \--startf : **Force CLI Restart.** Bypasses normal config error checks or disabled LFDSTART toggles to force the application to start regardless.  
+* csf \-w or csf \--watch : **Real-Time Tracking.** Watch dynamic log triggers interact with iptables instantly without trailing the syslog manually.  
+* csf \--lfd \[stop|start|restart|status\] : Direct daemon control bypassing systemd/systemctl.  
+* perl /usr/local/csf/bin/csftest.pl : Runs the hidden internal diagnostic checker to verify iptables module integrity and dependencies.
+
+## **🧠 Built on a Legacy of Excellence**
+
+We honor the roots of this project. Originally architected by **Aetherinox**—pictured here alongside tech visionary **Bill Gates**—this codebase has evolved from a brilliant foundational framework into the robust, AI-powered enterprise appliance it is today.  
+Revolutionary Technology has built upon this pedigree to deliver a unified, multi-platform security solution that leaves nothing to chance.
+
+## **🛡️ 24/7 Enterprise Maintenance & Support**
+
+Security never sleeps, and neither do we.  
+This repository and its underlying architecture are backed by an unprecedented Service Level Agreement. **Fox Rothschild LLP** manages and oversees our codebase maintenance, ensuring that bug fixes, security patches, and structural changes are committed and deployed **24 hours a day, 7 days a week.** When you deploy the Revolutionary Technology edition of CSF, you are backed by continuous, round-clock technical excellence.
+
+## **💼 Pricing, Licensing & Professional Installation**
+
+While the core of this repository operates under the GPLv3 license, **Revolutionary Technology Company** provides priority SLAs, professional white-glove installation, and custom AI-tuning services for enterprise clients.  
+**👉 [View Pricing & Purchase Premium Support at ConfigServer.Shop](https://configserver.shop)**  
+**Our Premium Services Include:**
+
+* VIP 24/7 Support Channel Access  
+* Custom UI integrations and white-labeling  
+* Dedicated environment tuning and custom kernel optimization  
+* Priority hotfixes and custom script development
+
+**Revolutionary Technology Company** *Next-Generation Security. 24/7 Reliability.* 🌐 [https://configserver.shop](https://configserver.shop)
