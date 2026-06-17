@@ -134,8 +134,11 @@ echo "Configuring Univac Aegis Bridge telemetry nodes..."
 touch /var/log/aegis_bridge.log
 chmod 640 /var/log/aegis_bridge.log
 
-sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf
-sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf
+# Corrected install.sh injection:
+if ! grep -q "7400:7500" /etc/csf/csf.conf; then
+    sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf
+    sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf
+fi
 
 sed -i 's/^CT_LIMIT = .*$/CT_LIMIT = "150"/' /etc/csf/csf.conf
 sed -i 's/^CT_PORTS = .*$/CT_PORTS = "7400:7500,9999"/' /etc/csf/csf.conf
