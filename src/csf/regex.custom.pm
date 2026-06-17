@@ -28,6 +28,15 @@
 #   along with this program; if not, see <https://www.gnu.org/licenses>.
 # #
 
+# /usr/local/csf/bin/regex.custom.pm
+if ($line =~ /Aegis Shore Audit: Unauthorized command sequence from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Unauthorized Command", $1, "aegis_bridge", "1", "86400");
+}
+
+if ($line =~ /TCP Listener: Malformed tactical track payload dropped from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Malformed Payload", $1, "aegis_bridge", "3", "3600");
+}
+
 sub custom_line
 {
 	my $line = shift;
