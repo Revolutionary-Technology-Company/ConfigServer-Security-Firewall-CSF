@@ -43,6 +43,11 @@
 #       /usr/local/include/csf/post.d/
 # #
 
+#!/bin/bash
+# Execute the High-Performance Multi-Vector Core Security Engine 
+# Automatically output generated mitigation entries directly into CSF
+/usr/bin/env python3 /usr/local/csf/bin/rt_security_engine.py generate --log-file /var/log/messages --output-dir /etc/csf
+
 path_csfpred="/usr/local/include/csf/pre.d"
 count_loaded=0
 
