@@ -179,9 +179,13 @@ if [ -d "/usr/local/cpanel" ]; then
     fi
     
     # Register App
-    if [ -x "/usr/local/cpanel/bin/register_appconfig" ]; then
-        /usr/local/cpanel/bin/register_appconfig /usr/local/cpanel/whostmgr/docroot/cgi/configserver/csf/csf.conf
-    fi
+if [ -e "/usr/local/cpanel/bin/register_appconfig" ]; then
+    # 1. ALWAYS unregister first to clear corrupted WHM cache
+    /usr/local/cpanel/bin/unregister_appconfig csf >/dev/null 2>&1
+    
+    # 2. Re-register a fresh copy
+    /usr/local/cpanel/bin/register_appconfig cpanel/csf.conf
+fi
     echo " done"
 fi
 
