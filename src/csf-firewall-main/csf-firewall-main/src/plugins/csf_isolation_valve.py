@@ -1,5 +1,21 @@
 import subprocess
+# Corrected Main Block in csf_gemini_manager.py
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='CSF Gemini Integration')
+    # ... (keep existing argparse setup) ...
 
+    if len(sys.argv) > 1 and sys.argv[1] == "--nightly":
+        run_nightly_optimization()
+    elif len(sys.argv) >= 5:
+        
+        # --- NEW FORK LOGIC ---
+        import os
+        if os.fork() != 0:
+            sys.exit(0) # Parent instantly returns control to LFD
+        # ----------------------
+        
+        handle_alert(sys.argv[1], sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
+        
 class CSFAirgapValve:
     def __init__(self, univac_ip: str, aviation_ip: str):
         self.univac_ip = univac_ip
