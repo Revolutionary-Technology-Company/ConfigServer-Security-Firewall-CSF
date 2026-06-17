@@ -268,6 +268,46 @@ if [ -x "/usr/local/sbin/csf-autotune.sh" ]; then
     /usr/local/sbin/csf-autotune.sh
 fi
 
+# ====================================================================
+# UNIVAC AEGIS BRIDGE INTEGRATION HOOK
+# ====================================================================
+echo "Configuring Univac Aegis Bridge telemetry nodes..."
+
+# 1. Ensure the Aegis log exists so LFD does not fail to start on boot
+touch /var/log/aegis_bridge.log
+chmod 640 /var/log/aegis_bridge.log
+
+# 2. Inject Aegis Tactical Ports into the live csf.conf
+sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf
+sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf
+
+# 3. Configure Connection Tracking for Aegis DDS limits
+sed -i 's/^CT_LIMIT = .*$/CT_LIMIT = "150"/' /etc/csf/csf.conf
+sed -i 's/^CT_PORTS = .*$/CT_PORTS = "7400:7500,9999"/' /etc/csf/csf.conf
+
+# 4. Map CUSTOM1_LOG to Aegis telemetry
+sed -i 's|^CUSTOM1_LOG = .*$|CUSTOM1_LOG = "/var/log/aegis_bridge.log"|' /etc/csf/csf.conf
+
+# 5. Inject LFD Regex Rules for Aegis Audits into regex.custom.pm
+# We use grep to ensure we don't append it twice on reinstall/upgrade
+if ! grep -q "Aegis Shore Audit" /usr/local/csf/bin/regex.custom.pm; then
+cat << 'EOF' >> /usr/local/csf/bin/regex.custom.pm
+
+# --- START UNIVAC AEGIS BRIDGE RULES ---
+if ($line =~ /Aegis Shore Audit: Unauthorized command sequence from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Unauthorized Command", $1, "aegis_bridge", "1", "86400");
+}
+
+if ($line =~ /TCP Listener: Malformed tactical track payload dropped from (\d+\.\d+\.\d+\.\d+)/) {
+    return ("Aegis Malformed Payload", $1, "aegis_bridge", "3", "3600");
+}
+# --- END UNIVAC AEGIS BRIDGE RULES ---
+EOF
+fi
+
+echo "Aegis Bridge integrated successfully."
+# ====================================================================
+
 echo ""
 echo "---------------------------------------------------------------"
 echo "Installation Complete."
