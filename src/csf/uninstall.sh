@@ -112,6 +112,60 @@ rm -fv /usr/sbin/csf
 rm -fv /usr/sbin/lfd
 rm -fv /usr/sbin/csf-autotune
 
+# ============================================================================
+# REVOLUTIONARY TECHNOLOGY: CUSTOM MODULE DEEP-SCRUB
+# ============================================================================
+echo "Scrubbing Custom RT Modules and Kernel Hooks..."
+
+# 1. Detach XDP/eBPF Kernel Programs safely
+if command -v ip >/dev/null 2>&1; then
+    echo "Detaching XDP network hooks..."
+    # Find interfaces that have xdp attached and turn them off
+    for iface in $(ip link show | grep -B 1 "xdp" | grep -v "xdp" | awk -F': ' '{print $2}'); do
+        ip link set dev "$iface" xdp off >/dev/null 2>&1
+        echo " - Removed XDP from $iface"
+    done
+fi
+
+# 2. Scrub AppArmor Profiles
+if [ -d "/etc/apparmor.d" ]; then
+    echo "Cleaning AppArmor profiles..."
+    rm -fv /etc/apparmor.d/usr.sbin.csf
+    rm -fv /etc/apparmor.d/usr.sbin.lfd
+    if command -v apparmor_parser >/dev/null 2>&1; then
+        # Reload AppArmor to clear the deleted profiles from memory
+        systemctl reload apparmor >/dev/null 2>&1 || true
+    fi
+fi
+
+# 3. Scrub RT Cronjobs & Polling Zombies
+echo "Removing custom polling cronjobs..."
+rm -fv /etc/cron.d/rt-gsb-poller
+rm -fv /etc/cron.d/csf-autotune
+rm -fv /etc/cron.d/rt-suricata
+rm -fv /etc/cron.hourly/rt-csf-update
+
+# Clean up root crontab if added directly
+if command -v crontab >/dev/null 2>&1; then
+    crontab -l 2>/dev/null | grep -v 'csf_isolation_valve.py' | grep -v 'rt-suricata-integrator.pl' | grep -v 'rt-google-ip-updater.pl' | crontab -
+fi
+
+# 4. Cleanup Python Isolation Valve & Custom Systemd hooks
+if [ -f "/etc/systemd/system/csf-isolation.service" ]; then
+    systemctl stop csf-isolation.service >/dev/null 2>&1
+    systemctl disable csf-isolation.service >/dev/null 2>&1
+    rm -fv /etc/systemd/system/csf-isolation.service
+    systemctl daemon-reload
+fi
+
+# 5. Scrub leftover custom log files
+rm -fv /var/log/csf-xdp.log
+rm -fv /var/log/csf-isolation.log
+rm -fv /var/log/rt-suricata.log
+
+echo "RT Modules scrubbed successfully."
+# ============================================================================
+
 # Remove init scripts and service links
 if [ -d "/etc/systemd/system" ]; then
     rm -fv /usr/lib/systemd/system/csf.service
