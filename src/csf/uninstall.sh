@@ -47,6 +47,19 @@ fi
 $IPTABLES -D INPUT -p tcp --syn -m u32 --u32 "0xc&0x000F0000>>16=0x5" -j DROP 2>/dev/null
 $IPTABLES -D INPUT -p tcp --syn -m u32 --u32 "0x22&0xFFFF=0x40" -j DROP 2>/dev/null
 
+# Force unregister from WHM
+if [ -x "/usr/local/cpanel/bin/unregister_appconfig" ]; then
+    /usr/local/cpanel/bin/unregister_appconfig csf >/dev/null 2>&1
+fi
+
+# Scrub the CGI directory
+/bin/rm -Rfv /usr/local/cpanel/whostmgr/docroot/cgi/configserver/
+
+# Scrub the Perl Drivers (This is what causes the mismatch!)
+/bin/rm -fv /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf.pm
+/bin/rm -Rfv /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver/ConfigServercsf
+/bin/touch /usr/local/cpanel/Cpanel/Config/ConfigObj/Driver
+
 # c. Flush GSB ipset
 if $IPSET list -n "rt_google_safesites" &>/dev/null; then
     $IPTABLES -D INPUT -m set --match-set rt_google_safesites src -j DROP 2>/dev/null
