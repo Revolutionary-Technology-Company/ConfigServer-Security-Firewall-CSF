@@ -3,6 +3,10 @@
 Revolutionary Technology - High-Performance Log Parser & Rule Generator (V2)
 Features: NVIDIA CUDA Acceleration, Numba JIT, Multicore Processing, LRU Cache.
 """
+import sys
+# Add the bin folder to the path so it can find your engine
+sys.path.append('/usr/local/csf/bin')
+import rt_security_engine
 import typer
 import re
 import socket
