@@ -96,6 +96,59 @@ for tool in $TOOLS; do
 done
 echo " done"
 
+# ============================================================================
+# REVOLUTIONARY TECHNOLOGY: CUSTOM MODULE DEPLOYMENT
+# ============================================================================
+echo "Deploying Custom RT Modules..."
+
+# 1. Create custom directory structures
+mkdir -p /etc/csf/plugins
+
+# 2. Copy all custom bash scripts and configurations
+cp -af rt-*.sh /etc/csf/ >/dev/null 2>&1 || true
+cp -af csf-*.sh /etc/csf/ >/dev/null 2>&1 || true
+cp -af stressengine.sh /etc/csf/ >/dev/null 2>&1 || true
+cp -af make_ui_cert.sh /etc/csf/ >/dev/null 2>&1 || true
+
+# 3. Copy Perl Integrations to the bin folder
+cp -af rt-*.pl /usr/local/csf/bin/ >/dev/null 2>&1 || true
+
+# 4. Copy Python Plugins safely
+if [ -d "plugins" ]; then
+    cp -af plugins/*.py /etc/csf/plugins/ >/dev/null 2>&1 || true
+fi
+
+# 5. Copy XDP C-source and compiler
+cp -af xdp_echo.c /etc/csf/ >/dev/null 2>&1 || true
+cp -af compile_xdp.sh /etc/csf/ >/dev/null 2>&1 || true
+
+# 6. Apply strict execution permissions
+chmod 700 /etc/csf/rt-*.sh /etc/csf/csf-*.sh /etc/csf/stressengine.sh /etc/csf/compile_xdp.sh >/dev/null 2>&1 || true
+chmod 700 /usr/local/csf/bin/rt-*.pl >/dev/null 2>&1 || true
+chmod 700 /etc/csf/plugins/*.py >/dev/null 2>&1 || true
+
+# 7. Execute Sub-Installers
+echo "Initializing Sub-Systems..."
+if [ -f "install-apparmor.sh" ]; then
+    sh install-apparmor.sh
+fi
+
+if [ -f "install-suricata.sh" ]; then
+    sh install-suricata.sh
+fi
+
+# 8. Compile XDP if clang is present (Prevents loader crash)
+if command -v clang >/dev/null 2>&1; then
+    echo "Compiling XDP eBPF modules..."
+    cd /etc/csf/ && sh compile_xdp.sh
+    cd - >/dev/null
+else
+    echo "WARNING: 'clang' not found. XDP hardware offloading will be unavailable."
+fi
+
+echo "RT Modules deployed successfully."
+# ============================================================================
+
 # --- 5. Install Configuration & Profiles ---
 echo -n "Installing configuration..."
 if [ ! -f "/etc/csf/csf.conf" ]; then
