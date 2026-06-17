@@ -146,7 +146,10 @@ if ! grep -q "Aegis Shore Audit" /usr/local/csf/bin/regex.custom.pm; then
 cat << 'EOF' >> /usr/local/csf/bin/regex.custom.pm
 -
 if ($line =~ /Aegis Shore Audit: Unauthorized command sequence from (\d+\.\d+\.\d+\.\d+)/) {
-    return ("Aegis Unauthorized Command", $1, "aegis_bridge", "1", "86400");
+# Corrected regex.custom.pm return lines:
+return ("Aegis Unauthorized Command", $1, "", "1", "86400");
+# and
+return ("Aegis Malformed Payload", $1, "", "3", "3600");
 }
 
 if ($line =~ /TCP Listener: Malformed tactical track payload dropped from (\d+\.\d+\.\d+\.\d+)/) {
