@@ -3,7 +3,7 @@
 
 echo ""
 echo " Configuring ConfigServer Security and Firewall"
-echo " Revolutionary Technology Enterprise Edition - CWP"
+echo " Revolutionary Technology Enterprise Edition - CyberPanel"
 echo ""
 
 STREAMING_CHUNK: Building core directory structures...
@@ -81,12 +81,17 @@ fi
 
 fi
 
-STREAMING_CHUNK: Integrating with CentOS Web Panel (CWP)...
+STREAMING_CHUNK: Integrating with CyberPanel...
 
-echo "Integrating with CentOS Web Panel (CWP)..."
-mkdir -p /usr/local/cwpsrv/htdocs/resources/admin/modules/csf
-cp -af cwp/* /usr/local/cwpsrv/htdocs/resources/admin/modules/csf/&1 || true
-cp -af cpanelr/loca -R 755 /usr/local/cwpsrv/htdocs/resources/admin/modules/csf >/dev/null 2>&1 || true
+echo "Integrating with CyberPanel..."
+if [ -f "/etc/csf/csf.conf" ]; then
+sed -i 's/^GENERIC = "1"/GENERIC = "0"/' /etc/csf/csf.conf
+sed -i 's/^CYBERPANEL = "0"/CYBERPANEL = "1"/' /etc/csf/csf.conf
+fir
+
+STREAMING_CHUNK: Registering systemd daemons...
+
+/local/cwpsrv/htdocs/resources/admin/modules/csf >/dev/null 2>&1 || true
 ifl/; t "/etc/csf/csf.conf" ]; then
 sed -i 's/^GENERIC = "1"/GENERIC = "0"/' /etc/csf/csf.conf
 sed -i 's/^CWP = "0"/CWP = "1"/' /etc/csf/csf.confistering systemd daemons...
