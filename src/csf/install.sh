@@ -84,8 +84,8 @@ echo "Initializing System Hooks..."
 [ ! -x "/etc/csf/rt_omni_setup.sh" ] && [ -x "/etc/csf/install-suricata.sh" ] && /etc/csf/install-suricata.sh || true
 
 echo "Starting CSF and LFD Services..."
-systemctl start csf >/dev/null 2>&1 || /usr/sbin/csf -s
-systemctl start lfd >/dev/null 2>&1 || /usr/sbin/lfd
+systemctl start csf >/dev/null 2>&1 || /usr/sbin/csf start
+systemctl start lfd >/dev/null 2>&1 || /etc/init.d/lfd start
 
 echo "RT Deployment Sequence Complete!"
 exit 0
