@@ -55,27 +55,19 @@ chmod 700 /usr/local/csf/bin/*.py >/dev/null 2>&1 || true
 chmod 700 /usr/local/csf/bin/auto.pl >/dev/null 2>&1 || true
 chmod 700 /etc/csf/plugins/*.py >/dev/null 2>&1 || true
 
-if [ -f "/etc/csf/csf.conf" ]; then
-    grep -q "7400:7500" /etc/csf/csf.conf
-    [ $? -ne 0 ] && echo "Injecting Aegis Tactical Ports safely..."
-    [ $? -ne 0 ] && sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf
-    [ $? -ne 0 ] && sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf
+[ -f "/etc/csf/csf.conf" ] && ! grep -q "7400:7500" /etc/csf/csf.conf && echo "Injecting Aegis Tactical Ports safely..." || true
+[ -f "/etc/csf/csf.conf" ] && ! grep -q "7400:7500" /etc/csf/csf.conf && sed -i 's/^TCP_IN = "/TCP_IN = "7400:7500,9999,/' /etc/csf/csf.conf || true
+[ -f "/etc/csf/csf.conf" ] && ! grep -q "7400:7500" /etc/csf/csf.conf && sed -i 's/^UDP_IN = "/UDP_IN = "7400:7500,/' /etc/csf/csf.conf || true
 
-    grep -q '^BLOCK_REPORT = ""' /etc/csf/csf.conf
-    [ $? -eq 0 ] && echo "Hooking Gemini AI V2..."
-    [ $? -eq 0 ] && sed -i 's|^BLOCK_REPORT = .*$|BLOCK_REPORT = "/etc/csf/plugins/csf_gemini_manager.py"|' /etc/csf/csf.conf
-fi
+[ -f "/etc/csf/csf.conf" ] && grep -q '^BLOCK_REPORT = ""' /etc/csf/csf.conf && echo "Hooking Gemini AI V2..." || true
+[ -f "/etc/csf/csf.conf" ] && grep -q '^BLOCK_REPORT = ""' /etc/csf/csf.conf && sed -i 's|^BLOCK_REPORT = .*$|BLOCK_REPORT = "/etc/csf/plugins/csf_gemini_manager.py"|' /etc/csf/csf.conf || true
 
 echo "Registering systemd daemons..."
-if [ -d "/etc/systemd/system" ]; then
-    if [ -f "csf.service" ]; then
-        cp -af csf.service /etc/systemd/system/csf.service
-        cp -af lfd.service /etc/systemd/system/lfd.service
-        systemctl daemon-reload
-        systemctl enable csf.service >/dev/null 2>&1 || true
-        systemctl enable lfd.service >/dev/null 2>&1 || true
-    fi
-fi
+[ -d "/etc/systemd/system" ] && [ -f "csf.service" ] && cp -af csf.service /etc/systemd/system/csf.service || true
+[ -d "/etc/systemd/system" ] && [ -f "lfd.service" ] && cp -af lfd.service /etc/systemd/system/lfd.service || true
+[ -d "/etc/systemd/system" ] && command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload >/dev/null 2>&1 || true
+[ -d "/etc/systemd/system" ] && command -v systemctl >/dev/null 2>&1 && systemctl enable csf.service >/dev/null 2>&1 || true
+[ -d "/etc/systemd/system" ] && command -v systemctl >/dev/null 2>&1 && systemctl enable lfd.service >/dev/null 2>&1 || true
 
 echo "Initializing System Hooks..."
 [ -x "/etc/csf/rt_omni_setup.sh" ] && /etc/csf/rt_omni_setup.sh || true
@@ -84,8 +76,8 @@ echo "Initializing System Hooks..."
 [ ! -x "/etc/csf/rt_omni_setup.sh" ] && [ -x "/etc/csf/install-suricata.sh" ] && /etc/csf/install-suricata.sh || true
 
 echo "Starting CSF and LFD Services..."
-systemctl start csf >/dev/null 2>&1 || /usr/sbin/csf start
-systemctl start lfd >/dev/null 2>&1 || /etc/init.d/lfd start
+systemctl start csf >/dev/null 2>&1 || /etc/init.d/csf start >/dev/null 2>&1 || /usr/sbin/csf -s >/dev/null 2>&1 || true
+systemctl start lfd >/dev/null 2>&1 || /etc/init.d/lfd start >/dev/null 2>&1 || /usr/sbin/lfd >/dev/null 2>&1 || true
 
 echo "RT Deployment Sequence Complete!"
 exit 0
