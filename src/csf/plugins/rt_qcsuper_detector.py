@@ -20,14 +20,24 @@ class RTQCSuperDetector:
             "0955": "Nvidia Corp (Tegra RCM / Switchroot Linux Boot)",
         }
 
-    def trigger_csf_isolation(self, threat_type, source, raw_payload=None):
+def trigger_csf_isolation(self, threat_type, source, raw_payload=None):
         print(f"\n[!!! CRITICAL THREAT DETECTED !!!]\nTHREAT: {threat_type}\nSOURCE: {source}")
         if "tcp" in source:
             ip = source.split(":")[1]
             subprocess.run(["csf", "-d", ip, "Unauthorized QCSuper / Diag Protocol Injection"])
         else:
-            subprocess.run(["chmod", "000", f"/dev/{source}"])
+            # FIXED: Security validation to prevent destructive blind chmod execution
+            valid_interfaces = ["ttyUSB0", "ttyUSB1", "ttyS0", "ttyACM0"]
+            if source in valid_interfaces:
+                subprocess.run(["chmod", "000", f"/dev/{source}"])
+            else:
+                print(f"[!] Warning: Interface {source} not in safe list. Chmod aborted.")
 
+if __name__ == "__main__":
+    print("[+] RT QCSuper Detector initialized.")
+    detector = RTQCSuperDetector()
+    # (Your byte stream listener loop will go here)
+                
     def analyze_stream_buffer(self, interface, byte_stream):
         if self.hdlc_flag in byte_stream:
             for sig_name, sig_bytes in self.threat_signatures.items():
