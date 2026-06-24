@@ -34,6 +34,45 @@
 #                       Dryrun install          sh install.sh --dryrun
 # #
 
+echo "[*] Scanning for ModSecurity version protocols..."
+
+# Target standard WHM ModSec3 audit path
+MODSEC3_PATH="/var/log/apache2/modsec_audit.log"
+CSF_CONF="/etc/csf/csf.conf"
+
+if [ -f "$MODSEC3_PATH" ] && grep -q '{' "$MODSEC3_PATH"; then
+    echo "    > ModSecurity 3.x (JSON) detected."
+    
+    # 1. Update the log path so LFD watches the flattened output instead of the raw JSON
+    sed -i 's|^MODSEC_LOG = .*|MODSEC_LOG = "/var/log/apache2/modsec_legacy_lfd.log"|' "$CSF_CONF"
+    
+    # 2. Deploy the converter service
+    cp /usr/local/csf/bin/modsec3_converter.pl /usr/local/bin/
+    chmod +x /usr/local/bin/modsec3_converter.pl
+    
+    cat << 'EOF' > /etc/systemd/system/modsec3-converter.service
+[Unit]
+Description=RT ModSec3 to LFD Log Converter
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/modsec3_converter.pl
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable modsec3-converter.service
+    systemctl start modsec3-converter.service
+    
+    echo "    > Deployed 'modsec3-converter.service'. LFD backwards compatibility activated."
+else
+    echo "    > Standard ModSecurity 2.x detected. Native CSF parsing will be used."
+fi
+
 # #
 #	Allow for execution from different relative directories
 # #
