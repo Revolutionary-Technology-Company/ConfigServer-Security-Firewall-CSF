@@ -23,7 +23,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 100000);
     __type(key, __u32);   // IPv4 Address
-    __type(value, __u8);  // Action ID
+    __type(value, __u32); // FIXED: Was __u8, must match 4-byte bpftool injection
 } blocked_ips SEC(".maps");
 
 // Map for Whitelisted TCP Ports (RT_TCP_XDP_STRICT)
@@ -31,7 +31,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65535);
     __type(key, __u16);
-    __type(value, __u8);
+    __type(value, __u32);
 } tcp_whitelist SEC(".maps");
 
 // Map for Whitelisted UDP Ports (RT_UDP_XDP_STRICT)
@@ -39,7 +39,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65535);
     __type(key, __u16);
-    __type(value, __u8);
+    __type(value, __u32);
 } udp_whitelist SEC(".maps");
 
 // Config map to toggle STRICT modes (0 = off, 1 = on)
@@ -47,7 +47,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 2);
     __type(key, __u32);   // 0 = TCP_STRICT, 1 = UDP_STRICT
-    __type(value, __u8);
+    __type(value, __u32);
 } strict_modes SEC(".maps");
 
 // --- Helper Functions ---
@@ -72,6 +72,14 @@ int rt_xdp_firewall(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
     void *data = (void *)(long)ctx->data;
 
+    struct iphdr *iph = (void *)(eth + 1);
+    if ((void *)(iph + 1) > data_end)
+        return XDP_PASS;
+
+    // FIXED: Prevent malformed length crashes
+    if (iph->ihl < 5) 
+        return XDP_DROP;
+    
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end)
         return XDP_PASS;
