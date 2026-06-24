@@ -74,22 +74,23 @@ done
 # 5. Enable Strict Modes if defined in csf.conf
 if grep -q "^RT_TCP_XDP_STRICT = \"1\"" "$CSF_CONF"; then
     echo "    > RT_TCP_XDP_STRICT is ENABLED."
-    bpftool map update id $STRICT_MAP key hex 00 00 00 00 value hex 01
+    # FIXED: Added padding to 4 bytes (01 00 00 00)
+    bpftool map update id $STRICT_MAP key hex 00 00 00 00 value hex 01 00 00 00 
 fi
 
 if grep -q "^RT_UDP_XDP_STRICT = \"1\"" "$CSF_CONF"; then
     echo "    > RT_UDP_XDP_STRICT is ENABLED."
-    bpftool map update id $STRICT_MAP key hex 01 00 00 00 value hex 01
+    bpftool map update id $STRICT_MAP key hex 01 00 00 00 value hex 01 00 00 00
 fi
 
-# 6. Push csf.deny into the XDP blocked_ips map with targeted Actions
-# Determine global action from csf.conf
+# 6. Push csf.deny into the XDP blocked_ips map
 DROP_SETTING=$(grep -E '^\s*DROP\s*=' "$CSF_CONF" | sed -e 's/ //g' -e 's/"//g' | cut -d'=' -f2)
-ACTION_HEX="00" # Default DROP
+# FIXED: Actions updated to match 4-byte map constraint
+ACTION_HEX="00 00 00 00" # Default DROP
 case "$DROP_SETTING" in
-    TARPIT) ACTION_HEX="01" ;;
-    ECHO)   ACTION_HEX="02" ;;
-    CHAOS)  ACTION_HEX="03" ;;
+    TARPIT) ACTION_HEX="01 00 00 00" ;;
+    ECHO)   ACTION_HEX="02 00 00 00" ;;
+    CHAOS)  ACTION_HEX="03 00 00 00" ;;
 esac
 
 echo "    > Injecting Blocklist to NIC driver (Action: $DROP_SETTING)..."
