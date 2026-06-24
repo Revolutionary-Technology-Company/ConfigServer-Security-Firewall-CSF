@@ -34,6 +34,11 @@
 #                       Dryrun install          sh install.sh --dryrun
 # #
 
+# Add to install.sh
+mkdir -p /var/log/csf_ram
+mount -t tmpfs -o size=256M tmpfs /var/log/csf_ram
+# Update your logging daemons to write to /var/log/csf_ram/ instead of /var/log/apache2/
+
 # Append to file distribution block inside install.sh
 echo "[*] Provisioning commercial licensing systems..."
 
