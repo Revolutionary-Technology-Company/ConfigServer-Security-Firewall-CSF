@@ -236,8 +236,8 @@ sub parse_iptables_tokens {
     my $proto = "";
 
     # Extract source/destination network layer addresses
-    if ($args =~ /-s\s+([^\s!]+)/) { push(@$match_ref, "ip saddr $1"); }
-    if ($args =~ /-d\s+([^\s!]+)/) { push(@$match_ref, "ip daddr $1"); }
+    if ($args =~ /-s\s+([^\s\!]+)/) { push(@$match_ref, "ip saddr $1"); }
+    if ($args =~ /-d\s+([^\s\!]+)/) { push(@$match_ref, "ip daddr $1"); }
 
     # Track structural L4 transport protocol flags 
     if ($args =~ /-p\s+(\S+)/) {
