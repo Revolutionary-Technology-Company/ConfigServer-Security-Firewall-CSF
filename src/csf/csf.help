@@ -10,6 +10,8 @@ DESCRIPTION
        This   manual   documents   the	csf  command  line  options  for  the  ConfigServer  &	Security  Firewall.  See  /etc/csf/csf.conf  and
        /etc/csf/readme.txt for more detailed information on how to use and configure this application.
 
+NFTABLES_ENGINE: This option enables an alternate runtime execution backend. Setting this option to "1" clones all active firewall features, advanced filters, and security blocks using natively compiled nftables and xtables-addons cross-compat engines while maintaining low-level hardware paths. Default: 0 [0=Legacy iptables engine, 1=Dynamic native nftables engine]
+
 OPTIONS
        -h,  --help
 	      Show this message
