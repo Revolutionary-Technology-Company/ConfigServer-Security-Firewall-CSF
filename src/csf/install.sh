@@ -378,6 +378,16 @@ run_installer()
     sh "${script_dir}/${installer}" "${installer}" "${description}"
 }
 
+echo "Verifying xtables-addons compatibility for nftables translation..."
+if modprobe xt_TARPIT 2>/dev/null; then
+    echo "  [OK] xt_TARPIT module loaded successfully."
+else
+    echo "  [WARNING] xt_TARPIT module not found. Advanced drop targets may fail in native mode."
+fi
+
+# Ensure the template is copied to the live directory
+cp src/csf/nftables.conf /etc/csf/nftables.conf
+
 # #
 #   Define which installation script to run
 # #
