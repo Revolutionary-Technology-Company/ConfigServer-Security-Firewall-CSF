@@ -34,6 +34,91 @@
 #                       Dryrun install          sh install.sh --dryrun
 # #
 
+# ==============================================================================
+# REVOLUTIONARY TECHNOLOGY - ENTERPRISE ENGINE INTEGRATION
+# ==============================================================================
+echo "[+] Initializing Revolutionary Technology Deployment Pipeline..."
+
+# 1. Establish Custom Directories
+mkdir -p /usr/local/csf/bin
+mkdir -p /usr/local/csf/plugins
+mkdir -p /etc/csf/xdp
+mkdir -p /etc/csf/modsec
+
+# 2. Deploy Binaries, Plugins, and Source Files
+echo "    > Deploying execution binaries and Python plugins..."
+cp bin/* /usr/local/csf/bin/
+cp plugins/* /usr/local/csf/plugins/
+cp xdp/* /etc/csf/xdp/
+cp modsec/* /etc/csf/modsec/
+cp rt_uninstall_engine.sh /usr/local/csf/bin/
+
+# Hook the Stateless Engine into CSF's native post-restart trigger
+cp csfpost.sh /etc/csf/csfpost.sh
+
+# Apply executable permissions globally to the deployment
+chmod +x /usr/local/csf/bin/*.sh
+chmod +x /usr/local/csf/bin/*.pl
+chmod +x /usr/local/csf/plugins/*.py
+chmod +x /etc/csf/csfpost.sh
+
+# 3. Phase 1: Compile & Sign Kernel Modules (Secure Boot/Xtables)
+echo "    > Phase 1: Building and Signing xtables-addons..."
+/usr/local/csf/bin/rt-install-modules.sh
+
+# 4. Phase 2: Inject U32 and SYN Hardening
+echo "    > Phase 2: Injecting U32 DDoS Mitigations..."
+/usr/local/csf/bin/ddos_mitigation.sh $(ip route show default | awk '/default/ {print $5}' | head -n1)
+
+# 5. Phase 3: Hardware Acceleration & Dynamic Tuning
+echo "    > Phase 3: Activating Responsive Resource Allocation Engine..."
+/usr/local/csf/bin/csf-autotune.sh
+
+# 6. Phase 4: Compile & Attach eBPF/XDP Shield
+echo "    > Phase 4: Compiling XDP Hardware Offload..."
+/usr/local/csf/bin/csf_bpf_loader.sh
+
+# 7. Deploy Threat Intelligence Cron Jobs
+echo "    > Deploying automated intelligence pollers..."
+ln -s /usr/local/csf/bin/rt-block-reporter.sh /etc/cron.daily/rt-block-reporter
+ln -s /usr/local/csf/bin/rt-google-ip-updater.pl /etc/cron.weekly/rt-google-ip-updater
+
+# 8. ModSecurity 3.x LFD Backwards Compatibility Daemon
+echo "    > Scanning for ModSecurity version protocols..."
+MODSEC3_PATH="/var/log/apache2/modsec_audit.log"
+if [ -f "$MODSEC3_PATH" ] && grep -q '{' "$MODSEC3_PATH"; then
+    echo "      [ModSec3 Detected] Re-routing logs and starting converter daemon..."
+    sed -i 's|^MODSEC_LOG = .*|MODSEC_LOG = "/var/log/apache2/modsec_legacy_lfd.log"|' "/etc/csf/csf.conf"
+    
+    cp /usr/local/csf/bin/modsec3_converter.pl /usr/local/bin/
+    cat << 'EOF' > /etc/systemd/system/modsec3-converter.service
+[Unit]
+Description=RT ModSec3 to LFD Log Converter
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/modsec3_converter.pl
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now modsec3-converter.service >/dev/null 2>&1
+fi
+
+# 9. Final Structural Reload
+echo "[+] Revolutionary Technology Engines Online. Executing final firewall reload..."
+csf -r >/dev/null 2>&1
+
+echo "==================================================================="
+echo " INSTALLATION COMPLETE"
+echo " Note: If Secure Boot is enforced, a reboot is required to enroll"
+echo " the MOK keys for the xtables-addons stateless driver pack."
+echo " Run: /usr/local/csf/bin/csf-firmware-check.sh to verify NIC status."
+echo "==================================================================="
+
 echo "[*] Scanning for ModSecurity version protocols..."
 
 # Target standard WHM ModSec3 audit path
