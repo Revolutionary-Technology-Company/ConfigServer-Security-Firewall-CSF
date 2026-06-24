@@ -24,8 +24,21 @@ class CSFAirgapValve:
         return True
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 5:
-        # Fork logic to instantly return control to the LFD daemon
-        if os.fork() != 0:
-            sys.exit(0) 
-        # Handle dynamic alerts here...
+    # Setup argparse properly
+    parser = argparse.ArgumentParser(description="CSF Airgap Valve")
+    parser.add_argument("--univac", required=True, help="UNIVAC IP Address")
+    parser.add_argument("--aviation", required=True, help="Aviation IP Address")
+    parser.add_argument("--action", choices=["isolate", "authorize"], required=True)
+    args = parser.parse_args()
+
+    # Fork logic to instantly return control to the LFD daemon
+    if os.fork() != 0:
+        sys.exit(0) 
+
+    # FIXED: Actually execute the class logic in the child process
+    valve = CSFAirgapValve(univac_ip=args.univac, aviation_ip=args.aviation)
+    
+    if args.action == "isolate":
+        valve.isolate_univac()
+    elif args.action == "authorize":
+        valve.authorize_univac()
