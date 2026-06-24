@@ -41,7 +41,7 @@
 #       /usr/local/include/csf/pre.d/
 #       /usr/local/include/csf/post.d/
 # #
-#!/bin/bash
+
 # /etc/csf/csfpost.sh (or standalone stressengine.sh)
 # Aetherinox Dynamic Target & Stateless Stress Engine
 
