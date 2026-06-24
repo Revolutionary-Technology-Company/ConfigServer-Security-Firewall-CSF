@@ -74,3 +74,69 @@ rm -Rfv /etc/csf /usr/local/csf /var/lib/csf
 
 echo
 echo "...Done"
+
+#!/usr/bin/env bash
+# ==============================================================================
+# ConfigServer Security & Firewall - Core Uninstaller Hook
+# Path: src/csf/uninstall.sh
+# ==============================================================================
+
+echo "==================================================================="
+echo " CONFIGSERVER SECURITY & FIREWALL UNINSTALLER"
+echo "==================================================================="
+
+# 1. Execute the Advanced Extension Guard first
+RT_CLEANER="/usr/local/csf/bin/rt_uninstall_engine.sh"
+if [ -f "$RT_CLEANER" ]; then
+    chmod +x "$RT_CLEANER"
+    bash "$RT_CLEANER"
+elif [ -f "./rt_uninstall_engine.sh" ]; then
+    chmod +x "./rt_uninstall_engine.sh"
+    bash "./rt_uninstall_engine.sh"
+fi
+
+# 2. Stop core heritage services
+echo "[*] Shuts down firewall and legacy authentication watchers..."
+if [ -f "/etc/init.d/lfd" ]; then
+    /etc/init.d/lfd stop
+elif command -v systemctl &>/dev/null; then
+    systemctl stop lfd >/dev/null 2>&1
+    systemctl stop csf >/dev/null 2>&1
+fi
+
+# 3. Clean environment integration maps (cPanel/DirectAdmin/Control Web Panel)
+echo "[*] Removing control panel hooks and binary trees..."
+if [ -f "/etc/chkserv.d/chkservd.conf" ]; then
+    echo "    > De-registering LFD monitoring from tailwatchd trees..."
+    sed -i '/^lfd:/d' /etc/chkserv.d/chkservd.conf
+    rm -f /etc/chkserv.d/lfd
+fi
+
+# Strip standard execution links from sbin
+rm -f /usr/sbin/csf
+rm -f /usr/sbin/lfd
+rm -f /usr/sbin/rt-csf-update
+
+# Remove the installation configuration nodes completely
+echo "[*] Purging configuration directories..."
+rm -rf /etc/csf
+rm -rf /var/lib/csf
+rm -rf /usr/local/csf
+
+# 4. Flush standard netfilter tables to prevent server locking
+echo "[*] Restoring default interface access tables..."
+iptables --flush
+iptables --delete-chain
+iptables -t nat --flush
+iptables -t nat --delete-chain
+
+if command -v ip6tables &>/dev/null; then
+    ip6tables --flush >/dev/null 2>&1
+    ip6tables --delete-chain >/dev/null 2>&1
+fi
+
+echo "==================================================================="
+echo " UNINSTALL COMPLETE"
+echo " Note: All hardware offloads, memory buffers, and Netfilter rules"
+echo " have been cleared. Default interface networking is restored."
+echo "==================================================================="
