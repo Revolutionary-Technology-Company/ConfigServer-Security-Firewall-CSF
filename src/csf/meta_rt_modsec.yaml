@@ -1,0 +1,9 @@
+---
+vendor_id: "rt_modsec"
+name: "Revolutionary Technology ModSec3 Engine"
+description: "Advanced L7 mitigation rules customized for high-availability enterprise environments."
+vendor_url: "https://github.com/Revolutionary-Technology-Company/ConfigServer-Security-Firewall-CSF"
+rules:
+  - src: "rt_rules.conf"
+    dest: "rt_rules.conf"
+    type: "config"
