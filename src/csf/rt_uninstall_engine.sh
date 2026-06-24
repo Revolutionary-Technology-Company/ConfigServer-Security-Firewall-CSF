@@ -119,3 +119,82 @@ echo "    - Stateful iptables tracking restored."
 echo "    - Univac-IX & Python integration pipelines severed."
 echo "    - Server is now running standard vanilla ConfigServer (CSF)."
 echo "==================================================================="
+
+#!/usr/bin/env bash
+# ==============================================================================
+# ConfigServer Security & Firewall - Master RT Extension Uninstaller
+# Path: /usr/local/csf/bin/rt_uninstall_engine.sh
+# Description: Protection-first cleanup module to strip out eBPF/XDP, nftables, 
+#              and continuous tracking daemons securely.
+# ==============================================================================
+
+echo "[*] Initializing Revolutionary Technology Engine Removal Track..."
+
+# --- 1. Teardown 24/7 Service Daemons ---
+echo "[*] Disabling continuous automated tracking services..."
+SERVICES=(
+    "rt-gsb-poller.service"       # Google Safe Sites Zero Trust Poller
+    "modsec3-converter.service"   # ModSec3 LFD Compatibility Engine
+    "csf-nic-accelerator.service" # Persistent Network Accelerator
+)
+
+for SERVICE in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
+        echo "    > Stopping $SERVICE..."
+        systemctl stop "$SERVICE" >/dev/null 2>&1
+    fi
+    if systemctl is-enabled --quiet "$SERVICE" 2>/dev/null; then
+        echo "    > Disabling $SERVICE..."
+        systemctl disable "$SERVICE" >/dev/null 2>&1
+    fi
+    rm -f "/etc/systemd/system/$SERVICE"
+done
+systemctl daemon-reload
+
+# --- 2. Remove Automated Threat Intelligence Cron Jobs ---
+echo "[*] Purging telemetry cron scripts..."
+CRON_LINKS=(
+    "/etc/cron.hourly/rt-block-reporter"
+    "/etc/cron.daily/rt-block-reporter"
+    "/etc/cron.weekly/rt-google-ip-updater"
+)
+
+for LINK in "${CRON_LINKS[@]}"; do
+    if [ -L "$LINK" ] || [ -f "$LINK" ]; then
+        echo "    > Removing $LINK..."
+        rm -f "$LINK"
+    fi
+done
+
+# --- 3. Detach eBPF / XDP Network Shields ---
+echo "[*] Revoking network driver level eBPF hardware offloads..."
+if command -v bpftool &>/dev/null; then
+    # Detect primary NIC using active routing table maps
+    PRIMARY_NIC=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}')
+    if [ -n "$PRIMARY_NIC" ]; then
+        echo "    > Detaching XDP shield from interface: $PRIMARY_NIC..."
+        ip link set dev "$PRIMARY_NIC" xdp off 2>/dev/null
+        ip link set dev "$PRIMARY_NIC" xdpgeneric off 2>/dev/null
+    fi
+fi
+
+# --- 4. Purge Custom Native NFTables Frameworks ---
+echo "[*] Flushing native netfilter tables and element sets..."
+if command -v nft &>/dev/null; then
+    if nft list table inet csf_firewall &>/dev/null; then
+        echo "    > Deleting table inet csf_firewall..."
+        nft delete table inet csf_firewall
+    fi
+fi
+
+# --- 5. Clean Repository Custom Directory Inodes ---
+echo "[*] Deleting execution binaries and Python plugin suite assets..."
+rm -rf /usr/local/csf/bin/rt_*
+rm -rf /usr/local/csf/bin/modsec3_*
+rm -rf /usr/local/csf/plugins/rt_*
+rm -rf /etc/csf/xdp
+rm -rf /etc/csf/modsec
+rm -f /etc/sysctl.d/99-csf-tuning.conf
+rm -f /var/lib/csf/rt-reporter.state
+
+echo "[+] Revolutionary Technology extension layers cleanly stripped[cite: 35]."
