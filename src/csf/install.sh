@@ -158,6 +158,37 @@ else
     echo "    > Standard ModSecurity 2.x detected. Native CSF parsing will be used."
 fi
 
+# ==============================================================================
+# PHASE 8: Deploy RT Zero Trust Defense (Google Safe Sites Integration)
+# ==============================================================================
+echo "    > Deploying RT Google Safe Sites 24/7 Poller..."
+
+# Make the poller script executable
+chmod +x /usr/local/csf/bin/rt-gsb-poller.sh
+
+# Create the systemd service file
+cat << 'EOF' > /etc/systemd/system/rt-gsb-poller.service
+[Unit]
+Description=RT Google Safe Sites Poller (Zero Trust Defense)
+After=network.target csf.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/csf/bin/rt-gsb-poller.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd and start the engine
+systemctl daemon-reload
+systemctl enable rt-gsb-poller.service >/dev/null 2>&1
+systemctl restart rt-gsb-poller.service >/dev/null 2>&1
+
+echo "      [Done] rt-gsb-poller.service is now running in the background."
+
 # #
 #	Allow for execution from different relative directories
 # #
