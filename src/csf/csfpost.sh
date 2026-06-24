@@ -42,77 +42,6 @@
 #       /usr/local/include/csf/post.d/
 # #
 
-# /etc/csf/csfpost.sh (or standalone stressengine.sh)
-# Aetherinox Dynamic Target & Stateless Stress Engine
-
-CSF_CONF="/etc/csf/csf.conf"
-DENY_PERM="/etc/csf/csf.deny"
-DENY_TEMP="/var/lib/csf/csf.tempban"
-IPTABLES=$(which iptables)
-
-echo "[+] Loading Revolutionary Technology Stress Engine..."
-
-# 1. Modprobe the entire driver pack
-DRIVER_PACK=("xt_TARPIT" "xt_CHAOS" "xt_DELUDE" "xt_ECHO" "xt_geoip" "xt_ACCOUNT")
-for mod in "${DRIVER_PACK[@]}"; do
-    modprobe "$mod" 2>/dev/null
-done
-
-# 2. Extract the DROP setting from csf.conf dynamically
-DROP_SETTING=$(grep -E '^\s*DROP\s*=' "$CSF_CONF" | sed -e 's/ //g' -e 's/"//g' | cut -d'=' -f2)
-
-# Set the Target (Fallback to standard DROP if misconfigured)
-if [[ "$DROP_SETTING" =~ ^(TARPIT|CHAOS|DELUDE|ECHO|DROP)$ ]]; then
-    TARGET="$DROP_SETTING"
-    echo "    > Engine target configured to: $TARGET"
-else
-    TARGET="DROP"
-    echo "    > Invalid target in csf.conf. Falling back to: DROP"
-fi
-
-# 3. Prepare our Custom Chains
-$IPTABLES -t raw -N RT_STRESS_RAW 2>/dev/null || $IPTABLES -t raw -F RT_STRESS_RAW
-$IPTABLES -t filter -N RT_STRESS_FILTER 2>/dev/null || $IPTABLES -t filter -F RT_STRESS_FILTER
-
-# Flush existing hooks to prevent duplicates on restart
-$IPTABLES -t raw -D PREROUTING -j RT_STRESS_RAW 2>/dev/null
-$IPTABLES -t filter -D INPUT -j RT_STRESS_FILTER 2>/dev/null
-
-# Hook chains (Insert at priority 1 to catch attackers immediately)
-$IPTABLES -t raw -I PREROUTING 1 -j RT_STRESS_RAW
-$IPTABLES -t filter -I INPUT 1 -j RT_STRESS_FILTER
-
-# 4. Helper function to apply the stateless rules
-apply_stateless_rule() {
-    local IP=$1
-    # Check if IP is valid (IPv4 only for iptables, use ip6tables for IPv6)
-    if [[ $IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$ ]]; then
-        # STEP A: Mark packet in RAW table to bypass kernel connection tracking entirely.
-        # This saves RAM and CPU by preventing the kernel from tracking the attacker's states.
-        $IPTABLES -t raw -A RT_STRESS_RAW -s "$IP" -j NOTRACK
-        
-        # STEP B: Apply the dynamic target (TARPIT, CHAOS, etc.) to the untracked packet.
-        $IPTABLES -t filter -A RT_STRESS_FILTER -s "$IP" -m conntrack --ctstate UNTRACKED -j "$TARGET"
-    fi
-}
-
-# 5. Populate Engine from CSF Blocklists
-echo "    > Applying stateless rules for blocked IPs..."
-
-if [ -f "$DENY_PERM" ]; then
-    grep -vE "^#|^$" "$DENY_PERM" | awk '{print $1}' | while read -r IP; do
-        apply_stateless_rule "$IP"
-    done
-fi
-
-if [ -f "$DENY_TEMP" ]; then
-    grep -vE "^#|^$" "$DENY_TEMP" | awk -F'|' '{print $1}' | while read -r IP; do
-        apply_stateless_rule "$IP"
-    done
-fi
-
-echo "[+] Revolutionary Technology Stress Engine active. Target: $TARGET (Stateless)."
-
 path_csfpostd="/usr/local/include/csf/post.d"
 count_loaded=0
 
@@ -578,3 +507,74 @@ fi
 # #
 
 ok "    Loaded ${greenl}${count_loaded}${greym} post.d initialization scripts"
+
+# /etc/csf/csfpost.sh (or standalone stressengine.sh)
+# Aetherinox Dynamic Target & Stateless Stress Engine
+
+CSF_CONF="/etc/csf/csf.conf"
+DENY_PERM="/etc/csf/csf.deny"
+DENY_TEMP="/var/lib/csf/csf.tempban"
+IPTABLES=$(which iptables)
+
+echo "[+] Loading Revolutionary Technology Stress Engine..."
+
+# 1. Modprobe the entire driver pack
+DRIVER_PACK=("xt_TARPIT" "xt_CHAOS" "xt_DELUDE" "xt_ECHO" "xt_geoip" "xt_ACCOUNT")
+for mod in "${DRIVER_PACK[@]}"; do
+    modprobe "$mod" 2>/dev/null
+done
+
+# 2. Extract the DROP setting from csf.conf dynamically
+DROP_SETTING=$(grep -E '^\s*DROP\s*=' "$CSF_CONF" | sed -e 's/ //g' -e 's/"//g' | cut -d'=' -f2)
+
+# Set the Target (Fallback to standard DROP if misconfigured)
+if [[ "$DROP_SETTING" =~ ^(TARPIT|CHAOS|DELUDE|ECHO|DROP)$ ]]; then
+    TARGET="$DROP_SETTING"
+    echo "    > Engine target configured to: $TARGET"
+else
+    TARGET="DROP"
+    echo "    > Invalid target in csf.conf. Falling back to: DROP"
+fi
+
+# 3. Prepare our Custom Chains
+$IPTABLES -t raw -N RT_STRESS_RAW 2>/dev/null || $IPTABLES -t raw -F RT_STRESS_RAW
+$IPTABLES -t filter -N RT_STRESS_FILTER 2>/dev/null || $IPTABLES -t filter -F RT_STRESS_FILTER
+
+# Flush existing hooks to prevent duplicates on restart
+$IPTABLES -t raw -D PREROUTING -j RT_STRESS_RAW 2>/dev/null
+$IPTABLES -t filter -D INPUT -j RT_STRESS_FILTER 2>/dev/null
+
+# Hook chains (Insert at priority 1 to catch attackers immediately)
+$IPTABLES -t raw -I PREROUTING 1 -j RT_STRESS_RAW
+$IPTABLES -t filter -I INPUT 1 -j RT_STRESS_FILTER
+
+# 4. Helper function to apply the stateless rules
+apply_stateless_rule() {
+    local IP=$1
+    # Check if IP is valid (IPv4 only for iptables, use ip6tables for IPv6)
+    if [[ $IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/[0-9]+)?$ ]]; then
+        # STEP A: Mark packet in RAW table to bypass kernel connection tracking entirely.
+        # This saves RAM and CPU by preventing the kernel from tracking the attacker's states.
+        $IPTABLES -t raw -A RT_STRESS_RAW -s "$IP" -j NOTRACK
+        
+        # STEP B: Apply the dynamic target (TARPIT, CHAOS, etc.) to the untracked packet.
+        $IPTABLES -t filter -A RT_STRESS_FILTER -s "$IP" -m conntrack --ctstate UNTRACKED -j "$TARGET"
+    fi
+}
+
+# 5. Populate Engine from CSF Blocklists
+echo "    > Applying stateless rules for blocked IPs..."
+
+if [ -f "$DENY_PERM" ]; then
+    grep -vE "^#|^$" "$DENY_PERM" | awk '{print $1}' | while read -r IP; do
+        apply_stateless_rule "$IP"
+    done
+fi
+
+if [ -f "$DENY_TEMP" ]; then
+    grep -vE "^#|^$" "$DENY_TEMP" | awk -F'|' '{print $1}' | while read -r IP; do
+        apply_stateless_rule "$IP"
+    done
+fi
+
+echo "[+] Revolutionary Technology Stress Engine active. Target: $TARGET (Stateless)."
