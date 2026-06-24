@@ -722,11 +722,11 @@ foreach my $line ( @config )
 			print $AUTO time;
 			close ( $AUTO );
 		}
-
-		if ( $name eq "CC_SRC" )
-		{
-			$line = "CC_SRC = \"1\""
-		}
+		
+if ( $name eq "CC_SRC" )
+        {
+            $line = "CC_SRC = \"1\"";
+        }
 
 		print OUT $line."\n";
 		print "New setting: $name\n";
