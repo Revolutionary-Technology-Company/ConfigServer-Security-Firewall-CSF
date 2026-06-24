@@ -991,7 +991,7 @@ jobs:
 
             - name: "📦 Commit › Execute"
               id: task_commit_execute
-              uses: stefanzweifel/git-auto-commit-action@v5
+              uses: stefanzweifel/git-auto-commit-action@v7
               with:
                   commit_message: ${{ env.COMMIT_MESSAGE }}
                   commit_author: "${{ steps.task_commit_gpg.outputs.name }} <${{ steps.task_commit_gpg.outputs.email }}>"
