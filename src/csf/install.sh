@@ -3,6 +3,11 @@
 echo "Configuring ConfigServer Security and Firewall"
 echo "Revolutionary Technology Enterprise Edition"
 
+echo "Please enter your Revolutionary Technology MUK Key:"
+read MUK_KEY
+
+[ -z "$MUK_KEY" ] && echo "FATAL ERROR: MUK Key is required for installation." && exit 1
+
 echo "Creating core directory structures..."
 mkdir -p /etc/csf
 mkdir -p /etc/csf/plugins
@@ -19,6 +24,10 @@ mkdir -p /var/lib/csf/webmin
 chmod 700 /etc/csf
 chmod 700 /usr/local/csf/bin
 chmod 700 /var/lib/csf
+
+echo "Securing MUK Key..."
+echo "$MUK_KEY" > /etc/csf/rt_license.muk
+chmod 600 /etc/csf/rt_license.muk
 
 echo "Deploying base firewall configurations..."
 
@@ -38,7 +47,7 @@ cp -af regex.pm /usr/local/csf/lib/ >/dev/null 2>&1 || true
 
 echo "Deploying Revolutionary Technology Enterprise Modules..."
 
-cp -af rt-*.sh csf-*.sh install-*.sh remove_*.sh stressengine.sh make_ui_cert.sh compile_xdp.sh /etc/csf/ >/dev/null 2>&1 || true
+cp -af rt-*.sh csf-*.sh csf-*.sh install-*.sh remove_*.sh stressengine.sh make_ui_cert.sh compile_xdp.sh /etc/csf/ >/dev/null 2>&1 || true
 cp -af rt_omni_setup.sh /etc/csf/ >/dev/null 2>&1 || true
 cp -af xdp_echo.c /etc/csf/ >/dev/null 2>&1 || true
 
@@ -74,6 +83,10 @@ echo "Initializing System Hooks..."
 
 [ ! -x "/etc/csf/rt_omni_setup.sh" ] && [ -x "/etc/csf/install-apparmor.sh" ] && /etc/csf/install-apparmor.sh || true
 [ ! -x "/etc/csf/rt_omni_setup.sh" ] && [ -x "/etc/csf/install-suricata.sh" ] && /etc/csf/install-suricata.sh || true
+
+[ -x "/etc/csf/csf-xdp-loader.sh" ] && /etc/csf/csf-xdp-loader.sh || true
+[ -x "/etc/csf/csf-firmware-check.sh" ] && /etc/csf/csf-firmware-check.sh || true
+[ -x "/etc/csf/csf-autotune.sh" ] && /etc/csf/csf-autotune.sh || true
 
 echo "Starting CSF and LFD Services..."
 systemctl start csf >/dev/null 2>&1 || /etc/init.d/csf start >/dev/null 2>&1 || /usr/sbin/csf -s >/dev/null 2>&1 || true
