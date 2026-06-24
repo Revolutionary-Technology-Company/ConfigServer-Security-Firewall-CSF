@@ -1,4 +1,65 @@
 ChangeLog:
+2.15.10 - Revolutionary Technology offers three distinct product lines:
+
+        **Version 15.0 The original legacy release from configserver.com.
+        This version is provided as-is for a small fee to cover bandwidth
+        and resources.
+
+        * **Version 15.** A non-profit, GUI-focused version primarily for
+        educational purposes.
+
+        * **Version 2.15.xx:** Our premium, modern product line. This is the only
+        version that receives hardware offloading & acceleration, new kernel-level
+        security features, iptables enhancements, and our latest GUI.
+
+2.15.10 - Developed for the Revolutionary Technology Company. Commercial inquiries: configserver.shop
+
+        Enterprise Hardware Acceleration Engine
+
+        Revolutionary Technology's core value is moving packet filtering from the CPU to the NIC microprocessors.
+
+        Responsive Resource Allocation:** The installer includes `csf-autotune.sh`, which dynamically profiles the host’s RAM/CPU ratio to optimize kernel-level conntrack boundaries, TCP window sizes, and hash-limit buckets.
+        Full NIC Offloading:** Activates TSO, GSO, GRO, and Checksumming on the NIC slice. The system automatically deploys `csf-nic-accelerator.service` to apply NIC Receive Packet Steering (RPS), balancing traffic across all available cores.
+        Kernel Hardening:** The installer enforces sysctl-based SYN-flood protection (`tcp_syncookies`, `tcp_max_syn_backlog`) and utilizes u32-based packet signature inspection to drop malformed packets before they reach the OS stack.
+        XDP/eBPF Shield:** Utilizing the `bpfilter` build system, the installer compiles `csf_xdp_drop.c` on-the-fly to attach a high-speed BPF filter directly to your network interface. This provides Zero-Trust "Block All" enforcement at the driver level.
+
+        Threat Intelligence & Zero Trust
+
+        Google Safe Sites Poller (`rt-gsb-poller.sh`):** A 24/7 service that pulls malicious Google Web Risk data, compiling it into a high-speed `ipset` (`rt_google_safesites`) for immediate hardware-level drops.
+        Community Defense Reporter (`rt-block-reporter.sh`):** An hourly cron orchestrator that parses blocked traffic, resolves infrastructure domains, and submits malicious hosts to the Google Web Risk API, contributing to global threat awareness.
+        Advanced Targets:** Full `xtables-addons` driver-pack support (TARPIT, CHAOS, DELUDE, ECHO, GEOIP) with automated **Secure Boot MOK signing** (`rt-sign-module.sh`), allowing these stateless targets to function securely on signed-kernel systems.
+
+        Hybrid Engine (Iptables + Nftables)
+
+        Default Engine:** Remains `iptables` for maximum compatibility.
+        Native Nftables Bridge:** We have implemented an exact feature-parity clone for `nftables` that can be toggled in the WHM configuration window. The engine uses a custom Perl translation layer in `csf.pl` to intercept legacy `iptables` syntax and recompile it into high-performance `nftables` sets and flowtables.
+        Compat Bridge:** Leverages `CONFIG_NFT_COMPAT` to ensure legacy modules (like `TARPIT` and `CHAOS`) retain full functionality within the native `nftables` environment.
+
+        Enterprise Integrations
+
+        ModSecurity 3.x:** Automated log path detection and deployment of `modsec3_converter.pl` (as `modsec3-converter.service`). This ensures native ModSecurity 3 JSON audit logs are flattened into LFD-compatible formats for automated blocking.
+        cPanel PHP-FPM:** Permanent logging exclusion for all cPanel-managed PHP-FPM master pools to prevent disk I/O saturation during high-traffic events.
+
+        Licensing & Secure Updates
+
+        Revolutionary Technology Updater (`rt-csf-update.sh`):** A fully refactored, cryptographically secure update client. It removes all public hard-coded download mirrors.
+        Authentication:** Access to v2.15.xx updates requires a valid `RT_LICENSE_KEY` defined in `csf.conf`.
+        Licensing Policy:** Please review `licensing_policy.md` for the commercial per-server licensing structure ($349/year).
+
+        Installation & Maintenance
+
+        Immediate Triage:
+
+        The installer applies a high-priority "Triage Block" instantly upon initiation. This creates a basic ingress filter even before the complex firewall rules are fully parsed, providing immediate relief during active attacks.
+
+        Verification:
+
+        Use `csftest.pl` to validate the hybrid engine and kernel bridge health.
+        Use `csf-firmware-check.sh` to confirm NIC hardware offload status and driver readiness.
+
+        Uninstallation:
+        Use `rt_uninstall_engine.sh` to perform a "Protection-First" teardown. It systematically detaches XDP shields, unloads kernel modules, stops services, and cleans configuration nodes, ensuring no rule-ghosting occurs after removal.
+
 15.10 - feat(conf): preserve custom user comments in config files across
         CSF updates
 
