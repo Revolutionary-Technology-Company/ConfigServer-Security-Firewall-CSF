@@ -699,9 +699,9 @@ foreach my $line ( @config )
 		}
 
 		if ( $name eq "CC_SRC" )
-		{
-			$line = "CC_SRC = \"1\""
-		}
+        {
+            $line = "CC_SRC = \"1\"";
+        }
 
 		print OUT $line."\n";
 		print "New setting: $name\n";
