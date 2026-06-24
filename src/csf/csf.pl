@@ -298,6 +298,17 @@ sub parse_iptables_tokens {
     return $action;
 }
 
+# Recommended robust approach for your parser:
+foreach my $line (@config_lines) {
+    chomp($line); # Strip trailing newline before processing
+    if ($line =~ /^(\S+)\s*=\s*"(.*)"/) {
+        my $name = $1;
+        if ($name eq "CC_SRC") {
+            $line = "CC_SRC = \"1\"";
+        }
+    }
+}
+
 ###############################################################################
 # Subroutine: compile_matches
 # Lightweight helper method to isolate clean match text during target removals
