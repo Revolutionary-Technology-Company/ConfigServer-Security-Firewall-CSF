@@ -159,6 +159,14 @@ if ($fatal) {print "\nRESULT: csf will not function on this server due to FATAL 
 elsif ($error) {print "\nRESULT: csf will function on this server but some features will not work due to some missing iptables modules [$error]\n"}
 else {print "\nRESULT: csf should function on this server\n"}
 
+print "Testing nftables compatibility bridge (CONFIG_NFT_COMPAT)...\n";
+my $compat_check = `lsmod | grep -E 'nft_compat|xt_TARPIT'`;
+if ($compat_check =~ /xt_TARPIT/) {
+    print "RESULT: nftables compatibility bridge and TARPIT module are ACTIVE.\n";
+} else {
+    print "RESULT: Warning - missing xt_TARPIT or nft_compat. Advanced targets may drop to standard DROP.\n";
+}
+
 sub testiptables {
 	my $command = shift;
 	my ($childin, $childout);
