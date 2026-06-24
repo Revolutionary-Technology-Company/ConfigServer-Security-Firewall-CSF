@@ -175,17 +175,141 @@ sub compile_to_nft {
 
 # Inside src/csf/csf.pl (or your core initialization module)
 
+###############################################################################
+# Subroutine: sys_firewall_cmd
+# Core interception and runtime translation router for CSF backend routing
+###############################################################################
 sub sys_firewall_cmd {
     my ($cmd_args) = @_;
-    
-    # Check if user toggled the NFTables Engine in WHM
-    if ($config{NFTABLES_ENGINE} eq "1") {
-        return compile_to_nft($cmd_args);
-    } else {
-        # Fall back to existing legacy iptables binary logic
+
+    # Fast check: If the WHM engine flag is not turned on, bypass directly to legacy paths
+    if ($config{NFTABLES_ENGINE} ne "1") {
         return system("$config{IPTABLES} $cmd_args");
     }
+
+    # Sanitize and capture command states
+    $cmd_args =~ s/^\s+|\s+$//g;
+    
+    # Track destination table and processing block layout variables
+    my $nft_table  = "inet csf_firewall";
+    my $nft_chain  = "input"; 
+    my @nft_match  = ();
+    my $nft_action = "";
+
+    # Parse Action Blocks (Append/Insert/Delete rulesets)
+    if ($cmd_args =~ /-I\s+(\S+)/ || $cmd_args =~ /-A\s+(\S+)/) {
+        $nft_chain = lc($1);
+    } elsif ($cmd_args =~ /-D\s+(\S+)/) {
+        # Translate rule teardowns directly to standard deletion routines
+        my $del_chain = lc($1);
+        # Stripping rule specifications out of args simplifies lookup
+        $cmd_args =~ s/-D\s+\S+//;
+        return system("nft delete rule $nft_table $del_chain " . compile_matches($cmd_args));
+    }
+
+    # Execute direct deep token extraction of arguments
+    $nft_action = parse_iptables_tokens($cmd_args, \@nft_match);
+
+    # Construct and compile atomic nft command line arrays
+    if ($nft_action ne "") {
+        my $match_string = join(" ", @nft_match);
+        my $final_nft_cmd = "nft add rule $nft_table $nft_chain $match_string $nft_action";
+        
+        # Log translation actions internally to lfd to track multi-engine operations
+        if ($config{DEBUG}) {
+            print STDERR "[CSF-NFT] Generated Command: $final_nft_cmd\n";
+        }
+        
+        return system($final_nft_cmd);
+    }
+
+    return 0;
 }
+
+###############################################################################
+# Subroutine: parse_iptables_tokens
+# Tokenizer parsing loops that capture and intercept rule definitions
+###############################################################################
+sub parse_iptables_tokens {
+    my ($args, $match_ref) = @_;
+    my $action = "";
+    my $proto = "";
+
+    # Extract source/destination network layer addresses
+    if ($args =~ /-s\s+([^\s!]+)/) { push(@$match_ref, "ip saddr $1"); }
+    if ($args =~ /-d\s+([^\s!]+)/) { push(@$match_ref, "ip daddr $1"); }
+
+    # Track structural L4 transport protocol flags 
+    if ($args =~ /-p\s+(\S+)/) {
+        $proto = lc($1);
+        push(@$match_ref, "ip protocol $proto");
+    }
+
+    # INTERCEPT MULTIPORT SYNTAX: Cleans complex multi-port lines into comma-delimited arrays
+    if ($args =~ /-m\s+multiport\s+--dports\s+(\S+)/) {
+        my $ports = $1;
+        $ports =~ s/:/-/g; # Normalize legacy range indicators to native nft hyphens
+        
+        if ($proto ne "") {
+            push(@$match_ref, "$proto dport { $ports }");
+        } else {
+            push(@$match_ref, "th dport { $ports }");
+        }
+    }
+    # Handle single structural port declarations
+    elsif ($args =~ /--dport\s+(\S+)/) {
+        my $port = $1;
+        $port =~ s/:/-/g;
+        if ($proto ne "") {
+            push(@$match_ref, "$proto dport $port");
+        } else {
+            push(@$match_ref, "th dport $port");
+        }
+    }
+
+    # Intercept and map state tracking mechanics
+    if ($args =~ /-m\s+state\s+--state\s+(\S+)/ || $args =~ /-m\s+conntrack\s+--ctstate\s+(\S+)/) {
+        my $states = lc($1);
+        push(@$match_ref, "ct state { $states }");
+    }
+
+    # CLONE ENGINE TARGET TARGETS: Native and Compat Bridging logic
+    if ($args =~ /-j\s+(\S+)/) {
+        my $target = $1;
+        
+        # 1. Map Core Actions directly to native expressions
+        if ($target eq "DROP")      { $action = "drop"; }
+        elsif ($target eq "ACCEPT") { $action = "accept"; }
+        elsif ($target eq "REJECT") { $action = "reject"; }
+        elsif ($target eq "LOG")    { $action = "log prefix \"CSF-LOG: \""; }
+        
+        # 2. X-Tables Addons Hook Targets processed over the CONFIG_NFT_COMPAT bridge
+        elsif ($target eq "TARPIT") { $action = "xt TARPIT"; }
+        elsif ($target eq "CHAOS")  { $action = "xt CHAOS"; }
+        elsif ($target eq "DELUGE") { $action = "xt DELUGE"; }
+        elsif ($target eq "ECHO")   { $action = "xt ECHO"; }
+        
+        # 3. Fallback routing map for unknown sub-chains built by advanced custom rules
+        else {
+            $action = "jump " . lc($target);
+        }
+    }
+
+    return $action;
+}
+
+###############################################################################
+# Subroutine: compile_matches
+# Lightweight helper method to isolate clean match text during target removals
+###############################################################################
+sub compile_matches {
+    my ($args) = @_;
+    my @matches = ();
+    parse_iptables_tokens($args, \@matches);
+    return join(" ", @matches);
+}
+
+1;
 
 sub log_prepare
 {
