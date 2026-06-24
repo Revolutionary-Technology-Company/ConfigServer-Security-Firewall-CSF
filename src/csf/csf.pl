@@ -129,6 +129,50 @@ my $bgYellowDark 	= "${esc}[1;38;5;15;48;5;172m";		# white on dark yellow/orange
 #       log_*
 # #
 
+sub compile_to_nft {
+    my ($iptables_args) = @_;
+    
+    # Base translation states
+    my $table  = "inet csf_firewall";
+    my $chain  = "input";
+    my $match  = "";
+    my $target = "";
+
+    # Parse common arguments
+    if ($iptables_args =~ /-I\s+(\S+)/ || $iptables_args =~ /-A\s+(\S+)/) { $chain = lc($1); }
+    if ($iptables_args =~ /-p\s+(\S+)/) { $match .= "ip protocol $1 "; }
+    if ($iptables_args =~ /--dport\s+(\S+)/) { $match .= "th dport $1 "; }
+    if ($iptables_args =~ /-s\s+(\S+)/) { $match .= "ip saddr $1 "; }
+
+    # 1. CLONE: TARPIT (xtables-addons) via nft compat
+    if ($iptables_args =~ /-j TARPIT/) {
+        $target = "xt TARPIT";
+    }
+    # 2. CLONE: CHAOS (xtables-addons) via nft compat
+    elsif ($iptables_args =~ /-j CHAOS/) {
+        $target = "xt CHAOS";
+    }
+    # 3. CLONE: DELUGE / TARPIT variants
+    elsif ($iptables_args =~ /-j DELUGE/) {
+        $target = "xt DELUGE";
+    }
+    # 4. Standard drops/accepts mapped natively
+    elsif ($iptables_args =~ /-j DROP/) {
+        $target = "drop";
+    }
+    elsif ($iptables_args =~ /-j ACCEPT/) {
+        $target = "accept";
+    }
+
+    # Construct the final nft command
+    if ($target ne "") {
+        my $nft_cmd = "nft add rule $table $chain $match $target";
+        return system($nft_cmd);
+    }
+    
+    return 0;
+}
+
 # Inside src/csf/csf.pl (or your core initialization module)
 
 sub sys_firewall_cmd {
