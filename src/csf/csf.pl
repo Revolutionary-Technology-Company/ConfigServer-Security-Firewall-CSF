@@ -129,6 +129,20 @@ my $bgYellowDark 	= "${esc}[1;38;5;15;48;5;172m";		# white on dark yellow/orange
 #       log_*
 # #
 
+# Inside src/csf/csf.pl (or your core initialization module)
+
+sub sys_firewall_cmd {
+    my ($cmd_args) = @_;
+    
+    # Check if user toggled the NFTables Engine in WHM
+    if ($config{NFTABLES_ENGINE} eq "1") {
+        return compile_to_nft($cmd_args);
+    } else {
+        # Fall back to existing legacy iptables binary logic
+        return system("$config{IPTABLES} $cmd_args");
+    }
+}
+
 sub log_prepare
 {
     my ( %opts )		= @_;
