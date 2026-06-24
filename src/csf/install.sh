@@ -159,6 +159,21 @@ else
 fi
 
 # ==============================================================================
+# PHASE 7: Deploy Automated Threat Intelligence Pipeline
+# ==============================================================================
+echo "    > Provisioning Community Defense Reporting Systems..."
+
+# Move the reporter script assets to the secure executable library tree
+cp bin/rt-block-reporter.sh /usr/local/csf/bin/rt-block-reporter.sh
+chmod +x /usr/local/csf/bin/rt-block-reporter.sh
+
+# Establish an automated link inside the system's hourly cron engine path
+rm -f /etc/cron.hourly/rt-block-reporter
+ln -s /usr/local/csf/bin/rt-block-reporter.sh /etc/cron.hourly/rt-block-reporter
+
+echo "      [Done] Connected rt-block-reporter.sh to hourly cron orchestrator."
+
+# ==============================================================================
 # PHASE 8: Deploy RT Zero Trust Defense (Google Safe Sites Integration)
 # ==============================================================================
 echo "    > Deploying RT Google Safe Sites 24/7 Poller..."
