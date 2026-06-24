@@ -34,6 +34,20 @@
 #                       Dryrun install          sh install.sh --dryrun
 # #
 
+# Append to file distribution block inside install.sh
+echo "[*] Provisioning commercial licensing systems..."
+
+# Move the update orchestrator and licensing profiles to runtime roots
+cp bin/rt-csf-update.sh /usr/local/csf/bin/rt-csf-update.sh
+cp licensing_policy.md /usr/local/csf/licensing_policy.md
+chmod +x /usr/local/csf/bin/rt-csf-update.sh
+
+# Establish standard symbolic path redirection for system updates
+rm -f /usr/sbin/rt-csf-update
+ln -s /usr/local/csf/bin/rt-csf-update.sh /usr/sbin/rt-csf-update
+
+echo "    > Connected update client to primary system sbin routing tree."
+
 # ==============================================================================
 # REVOLUTIONARY TECHNOLOGY - ENTERPRISE ENGINE INTEGRATION
 # ==============================================================================
